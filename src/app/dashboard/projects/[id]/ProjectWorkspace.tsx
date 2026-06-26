@@ -1,0 +1,919 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import MilestonesList from "./MilestonesList";
+import ProjectDocuments from "./ProjectDocuments";
+import ReportsDashboard from "../../reports/ReportsDashboard";
+import SummaryDashboard from "../../reports/SummaryDashboard";
+
+interface User {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  role: string;
+}
+
+interface Project {
+  id: string;
+  name: string;
+  code: string;
+  description: string | null;
+  location: string;
+  startDate: string;
+  endDate: string | null;
+  status: string;
+  budget: number;
+  manager: User;
+  engineers: User[];
+  materials: Array<{
+    id: string;
+    allocatedQty: number;
+    consumedQty: number;
+    material: { id: string; name: string; unit: string; stockCount: number; minStock: number };
+  }>;
+  documents: Array<{
+    id: string;
+    title: string;
+    fileUrl: string;
+    fileType: string;
+    fileSize: number;
+    uploadedBy: string;
+    createdAt: string;
+  }>;
+  milestones: Array<{
+    id: string;
+    title: string;
+    description: string | null;
+    dueDate: string;
+    isCompleted: boolean;
+  }>;
+}
+
+interface Task {
+  id: string;
+  title: string;
+  description: string | null;
+  dueDate: string;
+  status: string;
+  type: string;
+  progress: number;
+  projectId: string;
+  assigneeId: string | null;
+  assignee: { firstName: string; lastName: string } | null;
+}
+
+interface ChangeOrder {
+  id: string;
+  title: string;
+  description: string;
+  estimatedCost: number;
+  status: string;
+  rejectionReason: string | null;
+  projectId: string;
+  requester: { firstName: string; lastName: string };
+  approver: { firstName: string; lastName: string } | null;
+}
+
+interface ProjectNote {
+  id: string;
+  title: string;
+  content: string;
+  createdAt: string;
+  author: { firstName: string; lastName: string; role: string };
+}
+
+interface ProjectWorkspaceProps {
+  project: Project;
+  initialTasks: Task[];
+  initialChangeOrders: ChangeOrder[];
+  initialReports: any[];
+  initialSummaries: any[];
+  currentUser: {
+    id: string;
+    role: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+  };
+}
+
+export default function ProjectWorkspace({
+  project,
+  initialTasks,
+  initialChangeOrders,
+  initialReports,
+  initialSummaries,
+  currentUser,
+}: ProjectWorkspaceProps) {
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState<
+    "dashboard" | "crew" | "daily-logs" | "inventory" | "reports" | "documents" | "schedule"
+  >("dashboard");
+
+  // Sub-tab within Daily Logs
+  const [dailySubTab, setDailySubTab] = useState<
+    "qc-log" | "work-orders" | "change-orders" | "notes" | "visitors" | "inspection"
+  >("qc-log");
+
+  // Scoped Workspace State
+  const [tasks, setTasks] = useState<Task[]>(initialTasks);
+  const [changeOrders, setChangeOrders] = useState<ChangeOrder[]>(initialChangeOrders);
+  const [notes, setNotes] = useState<ProjectNote[]>([]);
+  const [notesLoading, setNotesLoading] = useState(false);
+
+  // Form Modals / Input State
+  const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+  const [isCOModalOpen, setIsCOModalOpen] = useState(false);
+  const [coRejectionModalOpen, setCoRejectionModalOpen] = useState(false);
+  const [activeCoId, setActiveCoId] = useState<string | null>(null);
+  const [rejectionReason, setRejectionReason] = useState("");
+
+  // Task form fields
+  const [taskTitle, setTaskTitle] = useState("");
+  const [taskDesc, setTaskDesc] = useState("");
+  const [taskDueDate, setTaskDueDate] = useState("");
+  const [taskAssigneeId, setTaskAssigneeId] = useState("");
+
+  // Change Order form fields
+  const [coTitle, setCoTitle] = useState("");
+  const [coDesc, setCoDesc] = useState("");
+  const [coCost, setCoCost] = useState("");
+
+  // Note form fields
+  const [noteTitle, setNoteTitle] = useState("");
+  const [noteContent, setNoteContent] = useState("");
+
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Load Notes when Notes sub-tab is active inside Daily Logs
+  useEffect(() => {
+    if (activeTab === "daily-logs" && dailySubTab === "notes") {
+      setNotesLoading(true);
+      fetch(`/api/projects/${project.id}/notes`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.notes) setNotes(data.notes);
+        })
+        .catch((err) => console.error("Error fetching notes:", err))
+        .finally(() => setNotesLoading(false));
+    }
+  }, [activeTab, dailySubTab, project.id]);
+
+  const isSE = currentUser.role === "SITE_ENGINEER";
+  const isPM = currentUser.role === "PROJECT_MANAGER";
+  const canModifyTasks = currentUser.role === "SYSTEM_ADMIN" || currentUser.role === "VP_OF_CONSTRUCTION" || isPM;
+
+  // Task handlers
+  const handleTaskStatusChange = async (taskId: string, newStatus: string, currentProgress: number) => {
+    let finalProgress = currentProgress;
+    if (newStatus === "COMPLETED") {
+      finalProgress = 100;
+    } else if (newStatus === "APPROVED" && currentProgress === 100) {
+      finalProgress = 0;
+    }
+
+    try {
+      const res = await fetch(`/api/tasks/${taskId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus, progress: finalProgress }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setTasks(tasks.map((t) => (t.id === taskId ? { ...t, status: data.task.status, progress: data.task.progress } : t)));
+        router.refresh();
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleTaskProgressChange = async (taskId: string, newProgress: number) => {
+    try {
+      const res = await fetch(`/api/tasks/${taskId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ progress: newProgress }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setTasks(tasks.map((t) => (t.id === taskId ? { ...t, progress: data.task.progress } : t)));
+        router.refresh();
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleCreateTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!taskTitle || !taskDueDate) return;
+    setIsLoading(true);
+
+    try {
+      const res = await fetch("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: taskTitle,
+          description: taskDesc,
+          dueDate: taskDueDate,
+          projectId: project.id,
+          assigneeId: taskAssigneeId || null,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setTasks([...tasks, data.task]);
+        setTaskTitle("");
+        setTaskDesc("");
+        setTaskDueDate("");
+        setTaskAssigneeId("");
+        setIsTaskModalOpen(false);
+        router.refresh();
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Change Orders handlers
+  const handleCreateChangeOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!coTitle || !coDesc || !coCost) return;
+    setIsLoading(true);
+
+    try {
+      const res = await fetch("/api/change-orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: coTitle,
+          description: coDesc,
+          estimatedCost: parseFloat(coCost),
+          projectId: project.id,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setChangeOrders([data.changeOrder, ...changeOrders]);
+        setCoTitle("");
+        setCoDesc("");
+        setCoCost("");
+        setIsCOModalOpen(false);
+        router.refresh();
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleApproveCO = async (coId: string) => {
+    try {
+      const res = await fetch(`/api/change-orders/${coId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "APPROVED" }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setChangeOrders(changeOrders.map((co) => (co.id === coId ? { ...co, status: data.changeOrder.status } : co)));
+        router.refresh();
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleRejectCO = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeCoId || !rejectionReason) return;
+    setIsLoading(true);
+
+    try {
+      const res = await fetch(`/api/change-orders/${activeCoId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "REJECTED", rejectionReason }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setChangeOrders(changeOrders.map((co) => (co.id === activeCoId ? { ...co, status: data.changeOrder.status, rejectionReason: data.changeOrder.rejectionReason } : co)));
+        setCoRejectionModalOpen(false);
+        setActiveCoId(null);
+        setRejectionReason("");
+        router.refresh();
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Notes handlers
+  const handleCreateNote = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!noteTitle || !noteContent) return;
+    setIsLoading(true);
+
+    try {
+      const res = await fetch(`/api/projects/${project.id}/notes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: noteTitle, content: noteContent }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setNotes([data.note, ...notes]);
+        setNoteTitle("");
+        setNoteContent("");
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Helpers
+  const formatCurrency = (val: number) => {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      maximumFractionDigits: 0,
+    }).format(val);
+  };
+
+  const getCOStatusBadgeStyle = (status: string) => {
+    switch (status) {
+      case "APPROVED":
+        return { backgroundColor: "rgba(34, 197, 94, 0.15)", color: "var(--success)" };
+      case "REJECTED":
+        return { backgroundColor: "rgba(239, 68, 68, 0.15)", color: "var(--error)" };
+      default:
+        return { backgroundColor: "rgba(234, 179, 8, 0.15)", color: "var(--warning)" };
+    }
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+      {/* Tab Menu Header */}
+      <div style={{ display: "flex", borderBottom: "1px solid var(--border)", gap: "8px", overflowX: "auto", paddingBottom: "4px" }}>
+        {[
+          { id: "dashboard",   label: "📊 Overview" },
+          { id: "crew",        label: "👷 Team" },
+          { id: "daily-logs",  label: "📋 Daily Logs" },
+          { id: "inventory",   label: "📦 Inventory" },
+          { id: "reports",     label: "📝 Reports" },
+          { id: "documents",   label: "📁 Documents" },
+          { id: "schedule",    label: "📅 Schedule" },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id as any)}
+            className="btn"
+            style={{
+              padding: "10px 16px",
+              borderRadius: "var(--radius-sm)",
+              backgroundColor: activeTab === tab.id ? "var(--accent)" : "transparent",
+              color: activeTab === tab.id ? "white" : "var(--text-secondary)",
+              border: "none",
+              fontWeight: 600,
+              fontSize: "13px",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── TAB CONTENT ── */}
+      <div className="animate-fade-in" style={{ minHeight: "60vh" }}>
+
+        {/* OVERVIEW */}
+        {activeTab === "dashboard" && (
+          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "24px", alignItems: "start" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+              <section className="glass-panel" style={{ padding: "24px" }}>
+                <h4 style={{ fontSize: "16px", fontWeight: 700, marginBottom: "16px" }}>Project Specifications</h4>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
+                  <div><span style={{ display: "block", fontSize: "11px", color: "var(--text-muted)", textTransform: "uppercase" }}>Manager</span><span style={{ fontSize: "14px", fontWeight: 600 }}>{project.manager.firstName} {project.manager.lastName}</span></div>
+                  <div><span style={{ display: "block", fontSize: "11px", color: "var(--text-muted)", textTransform: "uppercase" }}>Budget</span><span style={{ fontSize: "14px", fontWeight: 600 }}>{new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(project.budget)}</span></div>
+                  <div><span style={{ display: "block", fontSize: "11px", color: "var(--text-muted)", textTransform: "uppercase" }}>Location</span><span style={{ fontSize: "14px", fontWeight: 600 }}>{project.location}</span></div>
+                  <div><span style={{ display: "block", fontSize: "11px", color: "var(--text-muted)", textTransform: "uppercase" }}>Status</span><span style={{ fontSize: "14px", fontWeight: 600 }}>{project.status.replace(/_/g, " ")}</span></div>
+                  <div><span style={{ display: "block", fontSize: "11px", color: "var(--text-muted)", textTransform: "uppercase" }}>Start Date</span><span style={{ fontSize: "14px", fontWeight: 600 }}>{project.startDate}</span></div>
+                  <div><span style={{ display: "block", fontSize: "11px", color: "var(--text-muted)", textTransform: "uppercase" }}>End Date</span><span style={{ fontSize: "14px", fontWeight: 600 }}>{project.endDate ?? "TBD"}</span></div>
+                </div>
+              </section>
+              {project.description && (
+                <section className="glass-panel" style={{ padding: "24px" }}>
+                  <h4 style={{ fontSize: "14px", fontWeight: 700, marginBottom: "10px" }}>Description</h4>
+                  <p style={{ fontSize: "13px", color: "var(--text-secondary)", lineHeight: "1.6" }}>{project.description}</p>
+                </section>
+              )}
+            </div>
+            <section className="glass-panel" style={{ padding: "24px" }}>
+              <h4 style={{ fontSize: "14px", fontWeight: 700, marginBottom: "16px" }}>Project Team</h4>
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px", background: "var(--bg-base)", borderRadius: "var(--radius-sm)" }}>
+                  <div style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--accent)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "13px" }}>{project.manager.firstName[0]}</div>
+                  <div><div style={{ fontSize: "13px", fontWeight: 600 }}>{project.manager.firstName} {project.manager.lastName}</div><div style={{ fontSize: "11px", color: "var(--text-muted)" }}>Project Manager</div></div>
+                </div>
+                {project.engineers.map(e => (
+                  <div key={e.id} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px", background: "var(--bg-base)", borderRadius: "var(--radius-sm)" }}>
+                    <div style={{ width: 32, height: 32, borderRadius: "50%", background: "rgba(99,102,241,0.3)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "13px" }}>{e.firstName[0]}</div>
+                    <div><div style={{ fontSize: "13px", fontWeight: 600 }}>{e.firstName} {e.lastName}</div><div style={{ fontSize: "11px", color: "var(--text-muted)" }}>{e.role.replace(/_/g, " ")}</div></div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
+        )}
+
+        {/* TEAM */}
+        {activeTab === "crew" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+            <h4 style={{ fontSize: "16px", fontWeight: 700 }}>Project Team</h4>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "16px" }}>
+              {[project.manager, ...project.engineers].map(member => (
+                <div key={member.id} className="glass-panel" style={{ padding: "20px", display: "flex", alignItems: "center", gap: "16px" }}>
+                  <div style={{ width: 48, height: 48, borderRadius: "50%", background: "var(--accent)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "18px", flexShrink: 0 }}>{member.firstName[0]}</div>
+                  <div>
+                    <div style={{ fontSize: "14px", fontWeight: 700 }}>{member.firstName} {member.lastName}</div>
+                    <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginTop: "2px" }}>{member.role.replace(/_/g, " ")}</div>
+                    <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "4px" }}>{member.email}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* DAILY LOGS with sub-tabs */}
+        {activeTab === "daily-logs" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "0" }}>
+            {/* Sub-Tab Nav */}
+            <div style={{ display: "flex", gap: "4px", overflowX: "auto", marginBottom: "24px", borderBottom: "2px solid var(--border)" }}>
+              {[
+                { id: "qc-log",        label: "📋 QC Log" },
+                { id: "work-orders",   label: "🔧 Work Orders" },
+                { id: "change-orders", label: "💸 Change Orders" },
+                { id: "notes",         label: "📓 Notes" },
+                { id: "visitors",      label: "👥 Visitors" },
+                { id: "inspection",    label: "🔍 Inspection" },
+              ].map(sub => (
+                <button key={sub.id} onClick={() => setDailySubTab(sub.id as any)} style={{ padding: "10px 16px", background: "none", border: "none", borderBottom: dailySubTab === sub.id ? "2px solid var(--accent)" : "2px solid transparent", marginBottom: "-2px", fontWeight: 700, fontSize: "13px", color: dailySubTab === sub.id ? "var(--accent)" : "var(--text-secondary)", cursor: "pointer", whiteSpace: "nowrap", transition: "all 0.15s ease" }}>
+                  {sub.label}
+                </button>
+              ))}
+            </div>
+
+            {/* QC LOG */}
+            {dailySubTab === "qc-log" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                <div>
+                  <h4 style={{ fontSize: "16px", fontWeight: 700 }}>Daily Quality Control Log</h4>
+                  <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginTop: "4px" }}>Site Engineers submit daily equipment, manpower, and activity logs. Project Managers review and approve.</p>
+                </div>
+                <ReportsDashboard initialReports={initialReports.filter(r => r.project.id === project.id)} projects={[project as any]} currentUser={{ id: currentUser.id, role: currentUser.role, firstName: currentUser.firstName, lastName: currentUser.lastName }} />
+              </div>
+            )}
+
+            {/* WORK ORDERS */}
+            {dailySubTab === "work-orders" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <h4 style={{ fontSize: "16px", fontWeight: 700 }}>Work Orders</h4>
+                    <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginTop: "4px" }}>Track and manage site work orders assigned to crew members.</p>
+                  </div>
+                  {canModifyTasks && <button onClick={() => setIsTaskModalOpen(true)} className="btn btn-primary" style={{ backgroundColor: "var(--accent)", border: "none" }}>+ New Work Order</button>}
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px" }}>
+                  {[{ id: "DRAFT", label: "📋 Draft" }, { id: "PENDING_APPROVAL", label: "⏳ Pending" }, { id: "APPROVED", label: "✅ Approved" }, { id: "IN_PROGRESS", label: "🚧 In Progress" }, { id: "COMPLETED", label: "🎉 Done" }].map(col => {
+                    const colTasks = tasks.filter(t => t.status === col.id);
+                    return (
+                      <div key={col.id} className="glass-panel" style={{ padding: "16px", minHeight: "280px", border: "1px solid var(--border)" }}>
+                        <div style={{ fontWeight: 700, fontSize: "12px", borderBottom: "2px solid var(--border)", paddingBottom: "8px", marginBottom: "12px", display: "flex", justifyContent: "space-between" }}>
+                          <span>{col.label}</span><span style={{ opacity: 0.6 }}>({colTasks.length})</span>
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                          {colTasks.map(task => (
+                            <div key={task.id} style={{ padding: "12px", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", background: "var(--bg-base)" }}>
+                              <h5 style={{ fontWeight: 700, fontSize: "13px" }}>{task.title}</h5>
+                              {task.description && <p style={{ fontSize: "11px", color: "var(--text-secondary)", marginTop: "4px" }}>{task.description}</p>}
+                              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", marginTop: "8px", color: "var(--text-muted)" }}>
+                                <span>📅 {task.dueDate}</span><span>👤 {task.assignee ? task.assignee.firstName : "Unassigned"}</span>
+                              </div>
+                              <div style={{ display: "flex", gap: "4px", marginTop: "8px", borderTop: "1px solid var(--border)", paddingTop: "8px" }}>
+                                {task.status !== "DRAFT" && <button onClick={() => { const s = ["DRAFT","PENDING_APPROVAL","APPROVED","IN_PROGRESS","COMPLETED"]; const i = s.indexOf(task.status); if (i > 0) handleTaskStatusChange(task.id, s[i-1], task.progress); }} style={{ flex: 1, padding: "2px", fontSize: "9px" }} className="btn btn-secondary">◀</button>}
+                                {task.status !== "COMPLETED" && <button onClick={() => { const s = ["DRAFT","PENDING_APPROVAL","APPROVED","IN_PROGRESS","COMPLETED"]; const i = s.indexOf(task.status); if (i < s.length-1) handleTaskStatusChange(task.id, s[i+1], task.progress); }} style={{ flex: 1, padding: "2px", fontSize: "9px" }} className="btn btn-secondary">▶</button>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* CHANGE ORDERS */}
+            {dailySubTab === "change-orders" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <h4 style={{ fontSize: "16px", fontWeight: 700 }}>Change Orders</h4>
+                    <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginTop: "4px" }}>Requests for deviations from the approved scope, budget, or schedule.</p>
+                  </div>
+                  {isSE && <button onClick={() => setIsCOModalOpen(true)} className="btn btn-primary" style={{ backgroundColor: "var(--accent)", border: "none" }}>+ Request Change Order</button>}
+                </div>
+                {changeOrders.length === 0 ? (
+                  <div className="glass-panel" style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)" }}><div style={{ fontSize: "36px", marginBottom: "8px" }}>💸</div><p>No change orders yet.</p></div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                    {changeOrders.map(co => {
+                      const badgeStyle = getCOStatusBadgeStyle(co.status);
+                      return (
+                        <div key={co.id} className="glass-panel" style={{ padding: "16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <div>
+                            <h5 style={{ fontWeight: 700, fontSize: "14px" }}>{co.title}</h5>
+                            <p style={{ fontSize: "12px", color: "var(--text-secondary)", marginTop: "4px" }}>{co.description}</p>
+                            <div style={{ display: "flex", gap: "12px", fontSize: "11px", color: "var(--text-secondary)", marginTop: "8px" }}>
+                              <span>Cost: <strong style={{ color: "var(--accent)" }}>{formatCurrency(co.estimatedCost)}</strong></span>
+                              <span>By: {co.requester.firstName} {co.requester.lastName}</span>
+                            </div>
+                            {co.rejectionReason && <div style={{ fontSize: "11px", color: "var(--error)", borderLeft: "3px solid var(--error)", padding: "4px 8px", marginTop: "8px" }}>Rejected: {co.rejectionReason}</div>}
+                          </div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: "8px", alignItems: "flex-end" }}>
+                            <span style={{ padding: "4px 10px", fontSize: "10px", fontWeight: 700, borderRadius: "var(--radius-full)", ...badgeStyle }}>{co.status.replace(/_/g, " ")}</span>
+                            {isPM && co.status === "PENDING_APPROVAL" && (
+                              <div style={{ display: "flex", gap: "8px" }}>
+                                <button onClick={() => { setActiveCoId(co.id); setCoRejectionModalOpen(true); }} className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: "11px", borderColor: "var(--error)", color: "var(--error)" }}>Reject</button>
+                                <button onClick={() => handleApproveCO(co.id)} className="btn btn-primary" style={{ padding: "4px 10px", fontSize: "11px", backgroundColor: "var(--success)", border: "none" }}>Approve</button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* NOTES */}
+            {dailySubTab === "notes" && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "24px", alignItems: "start" }}>
+                <div className="glass-panel" style={{ padding: "20px" }}>
+                  <h4 style={{ fontSize: "14px", fontWeight: 700, marginBottom: "12px" }}>New Note</h4>
+                  <form onSubmit={handleCreateNote} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                    <div><label style={{ display: "block", fontSize: "11px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "4px" }}>Title *</label><input type="text" required placeholder="e.g. Cable inspection update" style={{ width: "100%", padding: "8px" }} value={noteTitle} onChange={e => setNoteTitle(e.target.value)} /></div>
+                    <div><label style={{ display: "block", fontSize: "11px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "4px" }}>Content *</label><textarea required rows={5} style={{ width: "100%", padding: "8px", fontFamily: "inherit" }} value={noteContent} onChange={e => setNoteContent(e.target.value)} /></div>
+                    <button type="submit" className="btn btn-primary" style={{ backgroundColor: "var(--accent)", border: "none" }} disabled={isLoading}>{isLoading ? "Posting..." : "Post Note"}</button>
+                  </form>
+                </div>
+                <div className="glass-panel" style={{ padding: "24px" }}>
+                  <h4 style={{ fontSize: "14px", fontWeight: 700, marginBottom: "16px" }}>Project Notes Log</h4>
+                  {notesLoading ? <div style={{ textAlign: "center", color: "var(--text-secondary)" }}>Loading...</div> : notes.length === 0 ? <p style={{ color: "var(--text-muted)", fontSize: "13px" }}>No notes yet.</p> : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                      {notes.map(n => (
+                        <div key={n.id} style={{ padding: "14px", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", background: "var(--bg-base)" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
+                            <h5 style={{ fontWeight: 700, fontSize: "14px" }}>{n.title}</h5>
+                            <span style={{ fontSize: "10px", color: "var(--text-secondary)" }}>{new Date(n.createdAt).toLocaleString()}</span>
+                          </div>
+                          <p style={{ fontSize: "13px", whiteSpace: "pre-wrap", lineHeight: "1.5" }}>{n.content}</p>
+                          <div style={{ fontSize: "11px", color: "var(--text-secondary)", marginTop: "8px", textAlign: "right" }}>— {n.author.firstName} {n.author.lastName} · {n.author.role.replace(/_/g, " ")}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* VISITORS */}
+            {dailySubTab === "visitors" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+                <div>
+                  <h4 style={{ fontSize: "16px", fontWeight: 700 }}>Site Visitor Log</h4>
+                  <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginTop: "4px" }}>Record all visitors who access the construction site for safety and compliance.</p>
+                </div>
+                <div className="glass-panel" style={{ padding: "24px", border: "1px dashed var(--border)" }}>
+                  <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--accent)", textTransform: "uppercase", letterSpacing: "0.5px" }}>👥 Log New Visitor</span>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px", marginTop: "16px" }}>
+                    <div><label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Visitor Name *</label><input type="text" placeholder="Full name" style={{ width: "100%", padding: "8px 12px" }} /></div>
+                    <div><label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Organization</label><input type="text" placeholder="Company or agency" style={{ width: "100%", padding: "8px 12px" }} /></div>
+                    <div><label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Purpose of Visit *</label><select style={{ width: "100%", padding: "8px 12px" }}><option>Inspection</option><option>Client Review</option><option>Regulatory Audit</option><option>Material Delivery</option><option>Safety Walkthrough</option><option>Other</option></select></div>
+                    <div><label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Date &amp; Time *</label><input type="datetime-local" style={{ width: "100%", padding: "8px 12px" }} /></div>
+                    <div><label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Badge / ID Number</label><input type="text" placeholder="Visitor ID or badge #" style={{ width: "100%", padding: "8px 12px" }} /></div>
+                    <div><label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Escorted By</label><select style={{ width: "100%", padding: "8px 12px" }}><option value="">Select crew member...</option>{project.engineers.map(e => <option key={e.id} value={e.id}>{e.firstName} {e.lastName}</option>)}</select></div>
+                  </div>
+                  <div style={{ marginTop: "16px" }}><label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Remarks</label><textarea rows={2} placeholder="Any notes about this visit..." style={{ width: "100%", padding: "8px 12px", fontFamily: "inherit" }} /></div>
+                  <button className="btn btn-primary" style={{ marginTop: "16px", backgroundColor: "var(--accent)", border: "none" }}>✅ Log Visitor Entry</button>
+                </div>
+                <div className="glass-panel" style={{ padding: "24px", textAlign: "center", color: "var(--text-muted)" }}><p style={{ fontSize: "13px", padding: "20px" }}>No visitors logged yet for this project.</p></div>
+              </div>
+            )}
+
+            {/* INSPECTION */}
+            {dailySubTab === "inspection" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+                <div>
+                  <h4 style={{ fontSize: "16px", fontWeight: 700 }}>Site Inspection Records</h4>
+                  <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginTop: "4px" }}>Document site inspections, safety audits, and quality checks.</p>
+                </div>
+                <div className="glass-panel" style={{ padding: "24px", border: "1px dashed var(--border)" }}>
+                  <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--accent)", textTransform: "uppercase", letterSpacing: "0.5px" }}>🔍 New Inspection Record</span>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px", marginTop: "16px" }}>
+                    <div><label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Inspection Type *</label><select style={{ width: "100%", padding: "8px 12px" }}><option>Structural Safety</option><option>Quality Control (QC)</option><option>Environmental Compliance</option><option>Fire &amp; Life Safety</option><option>Material Acceptance</option><option>Final Walkthrough</option><option>Other</option></select></div>
+                    <div><label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Inspector Name *</label><input type="text" placeholder="Full name of inspector" style={{ width: "100%", padding: "8px 12px" }} /></div>
+                    <div><label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Inspection Date *</label><input type="date" style={{ width: "100%", padding: "8px 12px" }} /></div>
+                    <div><label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Area / Zone *</label><input type="text" placeholder="e.g. Foundation, Block A" style={{ width: "100%", padding: "8px 12px" }} /></div>
+                    <div><label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Outcome *</label><select style={{ width: "100%", padding: "8px 12px" }}><option value="PASSED">✅ Passed</option><option value="FAILED">❌ Failed — Action Required</option><option value="CONDITIONAL">⚠️ Conditional Pass</option><option value="PENDING">⏳ Pending Review</option></select></div>
+                    <div><label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Follow-up Due Date</label><input type="date" style={{ width: "100%", padding: "8px 12px" }} /></div>
+                  </div>
+                  <div style={{ marginTop: "16px" }}><label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Findings &amp; Notes</label><textarea rows={3} placeholder="Describe findings or recommendations..." style={{ width: "100%", padding: "8px 12px", fontFamily: "inherit" }} /></div>
+                  <button className="btn btn-primary" style={{ marginTop: "16px", backgroundColor: "var(--accent)", border: "none" }}>✅ Save Inspection Record</button>
+                </div>
+                <div className="glass-panel" style={{ padding: "24px", textAlign: "center", color: "var(--text-muted)" }}><p style={{ fontSize: "13px", padding: "20px" }}>No inspection records logged yet.</p></div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* INVENTORY */}
+        {activeTab === "inventory" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+
+            {/* Header */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <div>
+                <h4 style={{ fontSize: "16px", fontWeight: 700 }}>Project Material Inventory</h4>
+                <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginTop: "4px" }}>
+                  Allocated materials and consumption status for <strong>{project.name}</strong>.
+                </p>
+              </div>
+              <div style={{ fontSize: "12px", color: "var(--text-muted)", textAlign: "right" }}>
+                <div>{project.materials.length} material{project.materials.length !== 1 ? "s" : ""} allocated</div>
+              </div>
+            </div>
+
+            {project.materials.length === 0 ? (
+              <div className="glass-panel" style={{ padding: "48px", textAlign: "center", color: "var(--text-muted)" }}>
+                <div style={{ fontSize: "40px", marginBottom: "12px" }}>📦</div>
+                <p style={{ fontSize: "14px", fontWeight: 600 }}>No materials allocated</p>
+                <p style={{ fontSize: "12px", marginTop: "6px" }}>Contact your administrator to allocate materials to this project.</p>
+              </div>
+            ) : (
+              <>
+                {/* KPI Summary Row */}
+                {(() => {
+                  const total = project.materials.length;
+                  const critical = project.materials.filter(m => m.allocatedQty > 0 && (m.consumedQty / m.allocatedQty) >= 0.9).length;
+                  const completed = project.materials.filter(m => m.consumedQty >= m.allocatedQty).length;
+                  const healthy = total - critical - completed;
+                  return (
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "16px" }}>
+                      {[
+                        { label: "Total Materials", value: total, icon: "📦", color: "var(--accent)" },
+                        { label: "Healthy Stock", value: healthy, icon: "✅", color: "var(--success)" },
+                        { label: "Critical (≥90%)", value: critical, icon: "⚠️", color: "var(--warning)" },
+                        { label: "Fully Consumed", value: completed, icon: "🔴", color: "var(--error)" },
+                      ].map(kpi => (
+                        <div key={kpi.label} className="glass-panel" style={{ padding: "16px", borderLeft: `3px solid ${kpi.color}` }}>
+                          <div style={{ fontSize: "22px", marginBottom: "6px" }}>{kpi.icon}</div>
+                          <div style={{ fontSize: "22px", fontWeight: 800, color: kpi.color }}>{kpi.value}</div>
+                          <div style={{ fontSize: "11px", color: "var(--text-secondary)", marginTop: "2px" }}>{kpi.label}</div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+
+                {/* Material Cards */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                  {project.materials.map(m => {
+                    const percent = m.allocatedQty > 0 ? (m.consumedQty / m.allocatedQty) * 100 : 0;
+                    const remaining = m.allocatedQty - m.consumedQty;
+                    const isCritical = percent >= 90 && percent < 100;
+                    const isExhausted = percent >= 100;
+                    const isLow = percent >= 70 && percent < 90;
+
+                    const statusLabel = isExhausted ? "Exhausted" : isCritical ? "Critical" : isLow ? "Low" : "Healthy";
+                    const statusColor = isExhausted ? "var(--error)" : isCritical ? "var(--warning)" : isLow ? "#f59e0b" : "var(--success)";
+                    const statusBg = isExhausted ? "rgba(239,68,68,0.1)" : isCritical ? "rgba(234,179,8,0.1)" : isLow ? "rgba(245,158,11,0.1)" : "rgba(34,197,94,0.1)";
+                    const barColor = isExhausted ? "var(--error)" : isCritical ? "var(--warning)" : isLow ? "#f59e0b" : "var(--accent)";
+
+                    return (
+                      <div key={m.id} className="glass-panel" style={{ padding: "20px", border: `1px solid ${isExhausted || isCritical ? statusColor + "40" : "var(--border)"}` }}>
+                        {/* Top row: name + status badge */}
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "16px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                            <div style={{ width: 40, height: 40, borderRadius: "var(--radius-sm)", background: "var(--bg-base)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "20px", border: "1px solid var(--border)" }}>
+                              📦
+                            </div>
+                            <div>
+                              <div style={{ fontSize: "15px", fontWeight: 700 }}>{m.material.name}</div>
+                              <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "2px" }}>Unit: <strong>{m.material.unit}</strong></div>
+                            </div>
+                          </div>
+                          <span style={{ padding: "4px 12px", borderRadius: "var(--radius-full)", fontSize: "11px", fontWeight: 700, backgroundColor: statusBg, color: statusColor, border: `1px solid ${statusColor}40` }}>
+                            {isExhausted ? "🔴" : isCritical ? "⚠️" : isLow ? "🟡" : "✅"} {statusLabel}
+                          </span>
+                        </div>
+
+                        {/* Stats grid */}
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: "12px", marginBottom: "16px" }}>
+                          <div style={{ padding: "10px 14px", background: "var(--bg-base)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" }}>
+                            <div style={{ fontSize: "10px", color: "var(--text-muted)", textTransform: "uppercase", fontWeight: 600, marginBottom: "4px" }}>Allocated</div>
+                            <div style={{ fontSize: "18px", fontWeight: 800, color: "var(--text-primary)" }}>{m.allocatedQty.toLocaleString()}</div>
+                            <div style={{ fontSize: "10px", color: "var(--text-muted)" }}>{m.material.unit}</div>
+                          </div>
+                          <div style={{ padding: "10px 14px", background: "var(--bg-base)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" }}>
+                            <div style={{ fontSize: "10px", color: "var(--text-muted)", textTransform: "uppercase", fontWeight: 600, marginBottom: "4px" }}>Consumed</div>
+                            <div style={{ fontSize: "18px", fontWeight: 800, color: barColor }}>{m.consumedQty.toLocaleString()}</div>
+                            <div style={{ fontSize: "10px", color: "var(--text-muted)" }}>{m.material.unit}</div>
+                          </div>
+                          <div style={{ padding: "10px 14px", background: "var(--bg-base)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" }}>
+                            <div style={{ fontSize: "10px", color: "var(--text-muted)", textTransform: "uppercase", fontWeight: 600, marginBottom: "4px" }}>Remaining</div>
+                            <div style={{ fontSize: "18px", fontWeight: 800, color: remaining <= 0 ? "var(--error)" : "var(--text-primary)" }}>{Math.max(0, remaining).toLocaleString()}</div>
+                            <div style={{ fontSize: "10px", color: "var(--text-muted)" }}>{m.material.unit}</div>
+                          </div>
+                          <div style={{ padding: "10px 14px", background: "var(--bg-base)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" }}>
+                            <div style={{ fontSize: "10px", color: "var(--text-muted)", textTransform: "uppercase", fontWeight: 600, marginBottom: "4px" }}>Global Stock</div>
+                            <div style={{ fontSize: "18px", fontWeight: 800, color: m.material.stockCount <= m.material.minStock ? "var(--error)" : "var(--text-primary)" }}>{m.material.stockCount.toLocaleString()}</div>
+                            <div style={{ fontSize: "10px", color: "var(--text-muted)" }}>Min: {m.material.minStock}</div>
+                          </div>
+                        </div>
+
+                        {/* Progress bar */}
+                        <div style={{ marginBottom: "8px" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "var(--text-secondary)", marginBottom: "6px" }}>
+                            <span>Consumption Progress</span>
+                            <span style={{ fontWeight: 700, color: barColor }}>{Math.min(Math.round(percent), 100)}%</span>
+                          </div>
+                          <div style={{ height: "8px", backgroundColor: "var(--border)", borderRadius: "var(--radius-full)", overflow: "hidden" }}>
+                            <div style={{ height: "100%", width: `${Math.min(percent, 100)}%`, backgroundColor: barColor, transition: "width 0.5s ease", borderRadius: "var(--radius-full)" }} />
+                          </div>
+                        </div>
+
+                        {/* Alert banner if critical/exhausted */}
+                        {(isCritical || isExhausted) && (
+                          <div style={{ marginTop: "12px", padding: "8px 12px", background: statusBg, border: `1px solid ${statusColor}40`, borderRadius: "var(--radius-sm)", fontSize: "12px", color: statusColor, display: "flex", alignItems: "center", gap: "8px" }}>
+                            <span>{isExhausted ? "🔴" : "⚠️"}</span>
+                            <span>
+                              {isExhausted
+                                ? `This material has been fully consumed. Request a restock if more ${m.material.unit} are required.`
+                                : `Only ${Math.max(0, remaining).toLocaleString()} ${m.material.unit} remaining — approaching allocation limit.`}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+
+        {/* REPORTS */}
+        {activeTab === "reports" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+            <div>
+              <h4 style={{ fontSize: "16px", fontWeight: 700 }}>Weekly &amp; Monthly Compiled Reports</h4>
+              <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginTop: "4px" }}>Project Managers compile and annotate weekly and monthly summary reports from daily logs.</p>
+            </div>
+            <SummaryDashboard initialSummaries={initialSummaries.filter(s => s.project.id === project.id)} projects={[project as any]} currentUser={{ role: currentUser.role }} />
+          </div>
+        )}
+
+        {/* DOCUMENTS — unified with category tabs */}
+        {activeTab === "documents" && (
+          <section className="glass-panel" style={{ padding: "24px" }}>
+            <ProjectDocuments projectId={project.id} initialDocuments={project.documents} />
+          </section>
+        )}
+
+        {/* SCHEDULE */}
+        {activeTab === "schedule" && (
+          <section className="glass-panel" style={{ padding: "24px" }}>
+            <MilestonesList projectId={project.id} initialMilestones={project.milestones} canEdit={canModifyTasks} />
+          </section>
+        )}
+
+      </div>
+
+{/* Task Creation Modal */}
+      {isTaskModalOpen && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: "24px" }}>
+          <div className="glass-panel" style={{ width: "100%", maxWidth: "480px", padding: "32px", margin: "auto", backgroundColor: "var(--bg-surface)", color: "var(--text-primary)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+              <h4 style={{ fontSize: "18px", fontWeight: 700 }}>Add Task / Work Order</h4>
+              <button style={{ background: "none", border: "none", fontSize: "20px", cursor: "pointer", color: "var(--text-secondary)" }} onClick={() => setIsTaskModalOpen(false)}>&times;</button>
+            </div>
+            <form onSubmit={handleCreateTask} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+              <div>
+                <label style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "4px" }}>Task Title *</label>
+                <input type="text" required placeholder="Anchor bolt inspections..." style={{ width: "100%", padding: "8px" }} value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} />
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "4px" }}>Description</label>
+                <textarea placeholder="Describe work scope..." rows={3} style={{ width: "100%", padding: "8px", fontFamily: "inherit" }} value={taskDesc} onChange={(e) => setTaskDesc(e.target.value)} />
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "4px" }}>Due Date *</label>
+                <input type="date" required style={{ width: "100%", padding: "8px" }} value={taskDueDate} onChange={(e) => setTaskDueDate(e.target.value)} />
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "4px" }}>Assignee</label>
+                <select style={{ width: "100%", padding: "8px" }} value={taskAssigneeId} onChange={(e) => setTaskAssigneeId(e.target.value)}>
+                  <option value="">Select Crew Member...</option>
+                  {project.engineers.map((eng) => <option key={eng.id} value={eng.id}>{eng.firstName} {eng.lastName}</option>)}
+                </select>
+              </div>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "10px" }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setIsTaskModalOpen(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary" style={{ backgroundColor: "var(--accent)", border: "none" }} disabled={isLoading}>{isLoading ? "Saving..." : "Save Work Order"}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Change Order Creation Modal */}
+      {isCOModalOpen && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: "24px" }}>
+          <div className="glass-panel" style={{ width: "100%", maxWidth: "480px", padding: "32px", margin: "auto", backgroundColor: "var(--bg-surface)", color: "var(--text-primary)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+              <h4 style={{ fontSize: "18px", fontWeight: 700 }}>Request Change Order</h4>
+              <button style={{ background: "none", border: "none", fontSize: "20px", cursor: "pointer", color: "var(--text-secondary)" }} onClick={() => setIsCOModalOpen(false)}>&times;</button>
+            </div>
+            <form onSubmit={handleCreateChangeOrder} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+              <div>
+                <label style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "4px" }}>Change Title *</label>
+                <input type="text" required placeholder="Extra concrete layer for pier..." style={{ width: "100%", padding: "8px" }} value={coTitle} onChange={(e) => setCoTitle(e.target.value)} />
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "4px" }}>Description *</label>
+                <textarea required placeholder="Detailed reason for deviation..." rows={4} style={{ width: "100%", padding: "8px", fontFamily: "inherit" }} value={coDesc} onChange={(e) => setCoDesc(e.target.value)} />
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "4px" }}>Estimated Cost ($) *</label>
+                <input type="number" required placeholder="4500" style={{ width: "100%", padding: "8px" }} value={coCost} onChange={(e) => setCoCost(e.target.value)} />
+              </div>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "10px" }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setIsCOModalOpen(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary" style={{ backgroundColor: "var(--accent)", border: "none" }} disabled={isLoading}>{isLoading ? "Submitting..." : "Submit Request"}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Change Order Rejection Modal */}
+      {coRejectionModalOpen && activeCoId && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: "24px" }}>
+          <div className="glass-panel" style={{ width: "100%", maxWidth: "420px", padding: "32px", margin: "auto", backgroundColor: "var(--bg-surface)", color: "var(--text-primary)" }}>
+            <h4 style={{ fontSize: "16px", fontWeight: 700, marginBottom: "12px" }}>Reject Change Order</h4>
+            <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "16px" }}>Please specify the reason for rejecting this change order request.</p>
+            <form onSubmit={handleRejectCO}>
+              <textarea
+                required
+                placeholder="Cost estimate exceeds allocation thresholds..."
+                rows={3}
+                style={{ width: "100%", padding: "8px", fontFamily: "inherit", fontSize: "13px", marginBottom: "16px" }}
+                value={rejectionReason}
+                onChange={(e) => setRejectionReason(e.target.value)}
+              />
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setCoRejectionModalOpen(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary" style={{ backgroundColor: "var(--error)", border: "none" }}>Reject Request</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}

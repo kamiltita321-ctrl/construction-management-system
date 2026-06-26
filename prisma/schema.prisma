@@ -1,0 +1,312 @@
+datasource db {
+  provider = "mysql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  SYSTEM_ADMIN
+  GENERAL_MANAGER
+  DEPUTY_GENERAL_MANAGER
+  VP_OF_CONSTRUCTION
+  PROJECT_MANAGER
+  SITE_ENGINEER
+}
+
+enum ProjectStatus {
+  PLANNING
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+}
+
+enum OrderStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  IN_PROGRESS
+  COMPLETED
+}
+
+model User {
+  id            String         @id @default(uuid())
+  email         String         @unique
+  passwordHash  String
+  firstName     String
+  lastName      String
+  phone         String?
+  role          Role
+  isActive      Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  // Relationships
+  managedProjects Project[]    @relation("ProjectManager")
+  siteProjects    Project[]    @relation("SiteEngineers")
+  assignedTasks   Task[]       @relation("TaskAssignee")
+  createdTasks    Task[]       @relation("TaskCreator")
+  reportsSubmitted DailyReport[] @relation("ReportSubmitter")
+  changeOrdersCreated ChangeOrder[] @relation("ChangeOrderRequester")
+  changeOrdersApproved ChangeOrder[] @relation("ChangeOrderApprover")
+  summaryReports   SummaryReport[] @relation("ReportCompiler")
+  projectNotes     ProjectNote[]
+}
+
+model Project {
+  id          String        @id @default(uuid())
+  name        String
+  code        String        @unique // Short project code (e.g., PRJ-2026-001)
+  description String?       @db.Text
+  location    String
+  startDate   DateTime
+  endDate     DateTime?
+  status      ProjectStatus @default(PLANNING)
+  budget      Float         @default(0.0)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  // Manager and Engineers
+  managerId   String
+  manager     User          @relation("ProjectManager", fields: [managerId], references: [id])
+  engineers   User[]        @relation("SiteEngineers")
+
+  // Sub-modules
+  milestones  Milestone[]
+  tasks       Task[]
+  changeOrders ChangeOrder[]
+  materials   MaterialAllocation[]
+  documents   Document[]
+  dailyReports DailyReport[]
+  summaryReports SummaryReport[]
+  projectNotes   ProjectNote[]
+}
+
+model Milestone {
+  id          String    @id @default(uuid())
+  title       String
+  description String?   @db.Text
+  dueDate     DateTime
+  isCompleted Boolean   @default(false)
+  projectId   String
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Task {
+  id          String      @id @default(uuid())
+  title       String
+  description String?     @db.Text
+  dueDate     DateTime
+  status      OrderStatus @default(DRAFT)
+  type        String      @default("WORK_ORDER") // "WORK_ORDER" or "CHANGE_ORDER_TASK"
+  progress    Int         @default(0) // 0-100 percentage
+  
+  projectId   String
+  project     Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  assigneeId  String?
+  assignee    User?       @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  
+  creatorId   String
+  creator     User        @relation("TaskCreator", fields: [creatorId], references: [id])
+
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+model ChangeOrder {
+  id             String      @id @default(uuid())
+  title          String
+  description    String      @db.Text
+  estimatedCost  Float
+  status         OrderStatus @default(PENDING_APPROVAL)
+  rejectionReason String?    @db.Text
+
+  projectId      String
+  project        Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  requesterId    String
+  requester      User        @relation("ChangeOrderRequester", fields: [requesterId], references: [id])
+
+  approverId     String?
+  approver       User?       @relation("ChangeOrderApprover", fields: [approverId], references: [id])
+
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+}
+
+model Material {
+  id          String               @id @default(uuid())
+  name        String               @unique
+  unit        String               // e.g., "bags", "tons", "meters"
+  stockCount  Float                @default(0.0)
+  minStock    Float                @default(0.0) // Reorder threshold
+  allocations MaterialAllocation[]
+  logs        MaterialLog[]
+}
+
+model MaterialAllocation {
+  id          String   @id @default(uuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  materialId  String
+  material    Material @relation(fields: [materialId], references: [id])
+  allocatedQty Float
+  consumedQty  Float   @default(0.0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model MaterialLog {
+  id          String   @id @default(uuid())
+  materialId  String
+  material    Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  quantity    Float    // positive for restock, negative for deduction
+  actionType  String   // "STOCK_IN", "STOCK_OUT", "DAILY_REPORT_CONSUMPTION"
+  referenceId String?  // Optional relation to DailyReport or PurchaseOrder
+  createdAt   DateTime @default(now())
+}
+
+model Document {
+  id          String   @id @default(uuid())
+  title       String
+  fileUrl     String
+  fileType    String   // "DRAWING", "CONTRACT", "REPORT", "IMAGE", "PDF"
+  fileSize    Int
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  uploadedBy  String   // User display name or ID
+  createdAt   DateTime @default(now())
+}
+
+model DailyReport {
+  id             String            @id @default(uuid())
+  reportDate     DateTime          // The operational date this report represents
+  workCompleted  String            @db.Text
+  issuesFaced    String?           @db.Text
+  weather        String?
+  
+  projectId      String
+  project        Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  submitterId    String
+  submitter      User              @relation("ReportSubmitter", fields: [submitterId], references: [id])
+  
+  isApproved     Boolean           @default(false)
+  approvedBy     String?
+
+  photos         ReportPhoto[]
+  materialUsage  ReportMaterialUsage[]
+  
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@unique([projectId, reportDate]) // One daily report per project per day
+}
+
+model ReportPhoto {
+  id            String      @id @default(uuid())
+  fileUrl       String
+  caption       String?
+  dailyReportId String
+  dailyReport   DailyReport @relation(fields: [dailyReportId], references: [id], onDelete: Cascade)
+}
+
+model ReportMaterialUsage {
+  id            String      @id @default(uuid())
+  dailyReportId String
+  dailyReport   DailyReport @relation(fields: [dailyReportId], references: [id], onDelete: Cascade)
+  materialName  String      // Store name directly to guard against material deletion histories
+  quantityUsed  Float
+}
+
+model SummaryReport {
+  id           String    @id @default(uuid())
+  title        String    // e.g., "Weekly Report - Week 23 (2026)" or "Monthly Report - May"
+  reportType   String    // "WEEKLY" or "MONTHLY"
+  startDate    DateTime
+  endDate      DateTime
+  commentary   String?   @db.Text // Custom feedback/commentary input by PM before compilation
+  
+  projectId    String
+  project      Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  compilerId   String
+  compiler     User      @relation("ReportCompiler", fields: [compilerId], references: [id])
+  
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model Activity {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+}
+
+model EquipmentType {
+  id        String    @id @default(uuid())
+  name      String    @unique
+  machines  Machine[]
+  createdAt DateTime  @default(now())
+}
+
+model Machine {
+  id              String        @id @default(uuid())
+  code            String        @unique
+  equipmentTypeId String
+  equipmentType   EquipmentType @relation(fields: [equipmentTypeId], references: [id], onDelete: Cascade)
+  status          String        @default("ACTIVE") // "ACTIVE", "MAINTENANCE", "DOWN"
+  createdAt       DateTime      @default(now())
+}
+
+model Unit {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+}
+
+model JobTitle {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+}
+
+model IdleReason {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+}
+
+model DownReason {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+}
+
+model Personnel {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  role      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ProjectNote {
+  id        String   @id @default(uuid())
+  title     String
+  content   String   @db.Text
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+

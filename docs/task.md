@@ -1,0 +1,24 @@
+# Construction Management System (CMS) - Task Checklist
+
+- [x] **Phase 1: Core System & Auth Setup**
+  - [x] Initialize Next.js App Router project in the workspace
+  - [x] Add global CSS variables and base stylesheet
+  - [x] Configure Prisma and connect to MySQL database
+  - [x] Develop database schema migrations and validation scripts
+  - [x] Set up Authentication and role-based route middleware
+  - [x] Develop seed scripts with initial roles and accounts
+- [x] **Phase 2: Project, Task & Document Management**
+  - [x] Project CRUD APIs and UI views (milestones list)
+  - [x] Work Orders and Change Orders API routes
+  - [x] Create Task Board / Kanban UI for Project Managers and Site Engineers
+  - [x] Setup Local Upload File Service (`public/uploads`) for drawings, contracts, and report photos
+- [x] **Phase 3: Inventory & Daily Reports**
+  - [x] Material Inventory views (add stock, track minimum levels)
+  - [x] Create Daily Report logging page for Site Engineers
+  - [x] Build Daily Report review & approval pipeline for Project Managers
+  - [x] Develop Weekly/Monthly PDF and screen summary aggregation with PM commentary
+- [/] **Phase 4: Dashboards, Analytics & Polish**
+  - [x] Role-based Dashboards (System Admin, Executive GM/DGM, VP, Project Manager, Site Engineer)
+  - [x] Budget vs. actual expense analytics charts (SVG donut + horizontal bars)
+  - [x] Responsive UI optimizations and glassmorphic micro-animations
+  - [x] System-wide notifications (polling-based alerts — 30s interval)

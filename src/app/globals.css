@@ -1,0 +1,412 @@
+/* Global Design Tokens & Custom CSS Properties */
+:root {
+  /* Fonts */
+  --font-sans: var(--font-geist-sans), system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  --font-mono: var(--font-geist-mono), monospace;
+
+  /* Premium Construction Theme (Light Mode Default) */
+  --primary-hue: 215;
+  --primary: hsl(var(--primary-hue), 25%, 15%);       /* Industrial Slate */
+  --primary-light: hsl(var(--primary-hue), 20%, 30%);
+  
+  --accent-hue: 24;
+  --accent: hsl(var(--accent-hue), 95%, 50%);         /* Construction Safety Orange */
+  --accent-hover: hsl(var(--accent-hue), 95%, 43%);
+  --accent-glow: hsla(var(--accent-hue), 95%, 50%, 0.15);
+
+  --success: hsl(142, 70%, 45%);                      /* Safety Green */
+  --warning: hsl(45, 93%, 47%);                       /* Warning Yellow */
+  --error: hsl(0, 84%, 60%);                          /* Alert Red */
+
+  /* Neutral Shades */
+  --bg-base: hsl(210, 20%, 98%);
+  --bg-surface: hsl(0, 0%, 100%);
+  --bg-sidebar: hsl(215, 25%, 12%);
+  --border: hsl(214, 32%, 91%);
+  --border-focus: hsl(var(--accent-hue), 95%, 50%);
+
+  --text-primary: hsl(215, 25%, 15%);
+  --text-secondary: hsl(215, 16%, 47%);
+  --text-muted: hsl(215, 13%, 70%);
+  --text-on-accent: hsl(0, 0%, 100%);
+
+  /* Layout and Effects */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-full: 9999px;
+
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.08);
+  --shadow-glow: 0 0 20px 0 var(--accent-glow);
+
+  --sidebar-width: 260px;
+  --header-height: 70px;
+  
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Glassmorphism details */
+  --glass-bg: rgba(255, 255, 255, 0.65);
+  --glass-border: rgba(255, 255, 255, 0.4);
+  --glass-blur: 16px;
+}
+
+/* Dark Mode Overrides */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --primary: hsl(var(--primary-hue), 25%, 85%);
+    --primary-light: hsl(var(--primary-hue), 20%, 90%);
+
+    --bg-base: hsl(222, 47%, 7%);
+    --bg-surface: hsl(223, 47%, 11%);
+    --bg-sidebar: hsl(224, 50%, 4%);
+    --border: hsl(217, 33%, 17%);
+
+    --text-primary: hsl(210, 40%, 98%);
+    --text-secondary: hsl(215, 20%, 75%);
+    --text-muted: hsl(215, 16%, 50%);
+
+    --glass-bg: rgba(15, 23, 42, 0.65);
+    --glass-border: rgba(255, 255, 255, 0.08);
+
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.4);
+  }
+}
+
+/* Base Styles */
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+html,
+body {
+  height: 100%;
+  width: 100%;
+  font-family: var(--font-sans);
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+main {
+  flex: 1;
+}
+
+/* Link Styles */
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Scrollbar Customization */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-base);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* Premium Component Foundations */
+.glass-panel {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+}
+
+.glass-panel-interactive {
+  composes: glass-panel;
+  transition: transform var(--transition-normal), box-shadow var(--transition-normal), border-color var(--transition-normal);
+}
+
+.glass-panel-interactive:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg), var(--shadow-glow);
+  border-color: hsla(var(--accent-hue), 95%, 50%, 0.3);
+}
+
+/* Interactive elements */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 20px;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn-primary {
+  background-color: var(--accent);
+  color: var(--text-on-accent);
+}
+
+.btn-primary:hover {
+  background-color: var(--accent-hover);
+  box-shadow: var(--shadow-glow);
+  transform: scale(1.02);
+}
+
+.btn-secondary {
+  background-color: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+}
+
+.btn-secondary:hover {
+  background-color: var(--border);
+}
+
+/* Utility Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn var(--transition-normal) forwards;
+}
+
+.animate-slide-up {
+  animation: slideUp var(--transition-normal) forwards;
+}
+
+/* Print Stylesheet overrides to enable clean multi-page document PDF/Print export */
+@media print {
+  body, html {
+    background: #fff !important;
+    color: #000 !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* Hide header, navigation sidebar, modals wrapper backgrounds, and close button icons */
+  header, aside, button:not(.btn-secondary), .sidebar, .contentWrapper > header, 
+  div[style*="position: fixed"] {
+    background-color: transparent !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+  }
+  
+  /* Select the view details modal wrapper specifically to stretch it full-height */
+  #printable-area {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: none !important;
+    height: auto !important;
+    overflow: visible !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Prevent elements from being hidden behind layouts */
+  body > * {
+    display: none !important;
+  }
+
+  /* Force display of only the print targeted wrapper and its parents */
+  body > div:has(#printable-area),
+  #printable-area,
+  #printable-area * {
+    display: block !important;
+  }
+
+  /* Re-enable flex behaviors where layout hierarchy requires it */
+  #printable-area,
+  #printable-area > div[style*="display: flex"] {
+    display: flex !important;
+  }
+
+  /* Re-enable grid structure where layout hierarchy requires it */
+  #printable-area div[style*="display: grid"] {
+    display: grid !important;
+  }
+
+  /* Ensure page breaks don't chop details mid-line */
+  #printable-area > div > div {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+}
+
+/* Global Form input/select/textarea styling for premium look and visibility */
+input, select, textarea {
+  background-color: var(--bg-base) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-sm) !important;
+  font-family: inherit !important;
+  font-size: 14px !important;
+}
+
+input:focus, select:focus, textarea:focus {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 2px var(--accent-glow) !important;
+  outline: none !important;
+}
+
+/* Options inside select elements */
+select option {
+  background-color: var(--bg-surface) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Table overrides for high contrast border separating rows */
+table tr {
+  border-bottom: 1px solid var(--border) !important;
+}
+
+table th {
+  color: var(--text-secondary) !important;
+}
+
+table td {
+  color: var(--text-primary) !important;
+}
+
+/* ── Quick Action Link hover ── */
+.quick-action-link:hover {
+  background-color: var(--accent-glow) !important;
+  border-color: var(--accent) !important;
+  color: var(--accent) !important;
+  transform: translateX(2px);
+}
+
+/* ── Micro-animations ── */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.4s ease both;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.4s ease both;
+}
+
+/* ── Responsive: mobile sidebar collapse ── */
+@media (max-width: 768px) {
+  /* Stacked layout on small screens */
+  :root {
+    --sidebar-width: 0px;
+  }
+
+  /* Hide sidebar on mobile */
+  aside[class*="sidebar"] {
+    display: none !important;
+  }
+
+  /* Full width content */
+  div[class*="contentWrapper"] {
+    width: 100vw !important;
+  }
+
+  div[class*="mainContent"] {
+    padding: 16px !important;
+  }
+
+  /* Stack overview grid columns */
+  section[style*="grid-template-columns: 2fr 1fr"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Stack KPI cards */
+  section[style*="repeat(auto-fit, minmax(200px"] {
+    grid-template-columns: 1fr 1fr !important;
+  }
+}
+
+@media (max-width: 480px) {
+  section[style*="repeat(auto-fit, minmax(200px"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  div[class*="mainContent"] {
+    padding: 12px !important;
+  }
+}
+
+/* ── Scrollbar styling for webkit browsers ── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-base);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* ── Glass panel hover transition ── */
+.glass-panel-interactive {
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast), border-color var(--transition-fast);
+}
+
+.glass-panel-interactive:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+

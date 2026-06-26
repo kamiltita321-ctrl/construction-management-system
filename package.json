@@ -1,0 +1,34 @@
+{
+  "name": "cms-app",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+  "dev": "next dev",
+  "build": "next build",
+  "start": "next start",
+  "lint": "eslint",
+  "check-db": "npx -r dotenv/config tsx prisma/check-db.ts"
+},
+  "dependencies": {
+    "@prisma/adapter-mariadb": "^7.8.0",
+    "dotenv": "^17.4.2",
+    "mariadb": "^3.5.2",
+    "next": "16.2.7",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@prisma/client": "^7.8.0",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.7",
+    "prisma": "^7.8.0",
+    "tsx": "^4.22.4",
+    "typescript": "^5"
+  },
+  "prisma": {
+    "seed": "npx tsx prisma/seed.ts"
+  }
+}
