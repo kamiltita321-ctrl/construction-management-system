@@ -3,12 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-  "dev": "next dev",
-  "build": "next build",
-  "start": "next start",
-  "lint": "eslint",
-  "check-db": "npx -r dotenv/config tsx prisma/check-db.ts"
-},
+    "dev": "next dev",
+    "build": "prisma generate && next build",
+    "start": "next start",
+    "lint": "eslint",
+    "check-db": "npx -r dotenv/config tsx prisma/check-db.ts"
+  },
   "dependencies": {
     "@prisma/adapter-mariadb": "^7.8.0",
     "dotenv": "^17.4.2",

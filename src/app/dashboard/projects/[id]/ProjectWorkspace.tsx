@@ -661,136 +661,100 @@ export default function ProjectWorkspace({
 
         {/* INVENTORY */}
         {activeTab === "inventory" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-
+          <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
             {/* Header */}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border)", paddingBottom: "12px" }}>
               <div>
                 <h4 style={{ fontSize: "16px", fontWeight: 700 }}>Project Material Inventory</h4>
-                <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginTop: "4px" }}>
-                  Allocated materials and consumption status for <strong>{project.name}</strong>.
+                <p style={{ fontSize: "12px", color: "var(--text-secondary)", marginTop: "2px" }}>
+                  Material allocations and current consumption tracking.
                 </p>
-              </div>
-              <div style={{ fontSize: "12px", color: "var(--text-muted)", textAlign: "right" }}>
-                <div>{project.materials.length} material{project.materials.length !== 1 ? "s" : ""} allocated</div>
               </div>
             </div>
 
             {project.materials.length === 0 ? (
-              <div className="glass-panel" style={{ padding: "48px", textAlign: "center", color: "var(--text-muted)" }}>
-                <div style={{ fontSize: "40px", marginBottom: "12px" }}>📦</div>
-                <p style={{ fontSize: "14px", fontWeight: 600 }}>No materials allocated</p>
-                <p style={{ fontSize: "12px", marginTop: "6px" }}>Contact your administrator to allocate materials to this project.</p>
-              </div>
+              <p style={{ color: "var(--text-muted)", fontSize: "13px" }}>No materials assigned.</p>
             ) : (
-              <>
-                {/* KPI Summary Row */}
-                {(() => {
-                  const total = project.materials.length;
-                  const critical = project.materials.filter(m => m.allocatedQty > 0 && (m.consumedQty / m.allocatedQty) >= 0.9).length;
-                  const completed = project.materials.filter(m => m.consumedQty >= m.allocatedQty).length;
-                  const healthy = total - critical - completed;
+              <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                {project.materials.map(m => {
+                  const percent = m.allocatedQty > 0 ? (m.consumedQty / m.allocatedQty) * 100 : 0;
+                  const remaining = m.allocatedQty - m.consumedQty;
+                  
+                  // Color codes
+                  let statusColor = "var(--success)";
+                  if (percent >= 100) {
+                    statusColor = "var(--error)";
+                  } else if (percent >= 90) {
+                    statusColor = "var(--warning)";
+                  } else if (percent >= 70) {
+                    statusColor = "#f59e0b"; // amber
+                  }
+
+                  const isCritical = percent >= 90 && percent < 100;
+                  const isExhausted = percent >= 100;
+
                   return (
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "16px" }}>
-                      {[
-                        { label: "Total Materials", value: total, icon: "📦", color: "var(--accent)" },
-                        { label: "Healthy Stock", value: healthy, icon: "✅", color: "var(--success)" },
-                        { label: "Critical (≥90%)", value: critical, icon: "⚠️", color: "var(--warning)" },
-                        { label: "Fully Consumed", value: completed, icon: "🔴", color: "var(--error)" },
-                      ].map(kpi => (
-                        <div key={kpi.label} className="glass-panel" style={{ padding: "16px", borderLeft: `3px solid ${kpi.color}` }}>
-                          <div style={{ fontSize: "22px", marginBottom: "6px" }}>{kpi.icon}</div>
-                          <div style={{ fontSize: "22px", fontWeight: 800, color: kpi.color }}>{kpi.value}</div>
-                          <div style={{ fontSize: "11px", color: "var(--text-secondary)", marginTop: "2px" }}>{kpi.label}</div>
+                    <div key={m.id} className="glass-panel" style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                      {/* Name & Details row */}
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span style={{ fontWeight: 600, fontSize: "14px" }}>{m.material.name}</span>
+                        <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)" }}>
+                          Unit: {m.material.unit}
+                        </span>
+                      </div>
+
+                      {/* Clean Minimalistic metrics */}
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px", textAlign: "center", background: "rgba(255,255,255,0.02)", borderRadius: "var(--radius-sm)", padding: "10px", border: "1px solid var(--border)" }}>
+                        <div>
+                          <div style={{ fontSize: "10px", color: "var(--text-muted)", textTransform: "uppercase" }}>Allocated</div>
+                          <div style={{ fontSize: "14px", fontWeight: 700, marginTop: "2px" }}>{m.allocatedQty.toLocaleString()}</div>
                         </div>
-                      ))}
-                    </div>
-                  );
-                })()}
+                        <div>
+                          <div style={{ fontSize: "10px", color: "var(--text-muted)", textTransform: "uppercase" }}>Consumed</div>
+                          <div style={{ fontSize: "14px", fontWeight: 700, marginTop: "2px", color: percent >= 90 ? "var(--error)" : "inherit" }}>{m.consumedQty.toLocaleString()}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: "10px", color: "var(--text-muted)", textTransform: "uppercase" }}>Remaining</div>
+                          <div style={{ fontSize: "14px", fontWeight: 700, marginTop: "2px", color: remaining <= 0 ? "var(--error)" : "inherit" }}>{Math.max(0, remaining).toLocaleString()}</div>
+                        </div>
+                      </div>
 
-                {/* Material Cards */}
-                <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-                  {project.materials.map(m => {
-                    const percent = m.allocatedQty > 0 ? (m.consumedQty / m.allocatedQty) * 100 : 0;
-                    const remaining = m.allocatedQty - m.consumedQty;
-                    const isCritical = percent >= 90 && percent < 100;
-                    const isExhausted = percent >= 100;
-                    const isLow = percent >= 70 && percent < 90;
+                      {/* Progress bar */}
+                      <div>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "var(--text-secondary)", marginBottom: "4px" }}>
+                          <span>Consumption Progress</span>
+                          <span style={{ fontWeight: 700 }}>{Math.round(percent)}%</span>
+                        </div>
+                        <div style={{ height: "6px", backgroundColor: "var(--border)", borderRadius: "var(--radius-full)", overflow: "hidden" }}>
+                          <div style={{ height: "100%", width: `${Math.min(percent, 100)}%`, backgroundColor: statusColor, transition: "width 0.4s ease" }} />
+                        </div>
+                      </div>
 
-                    const statusLabel = isExhausted ? "Exhausted" : isCritical ? "Critical" : isLow ? "Low" : "Healthy";
-                    const statusColor = isExhausted ? "var(--error)" : isCritical ? "var(--warning)" : isLow ? "#f59e0b" : "var(--success)";
-                    const statusBg = isExhausted ? "rgba(239,68,68,0.1)" : isCritical ? "rgba(234,179,8,0.1)" : isLow ? "rgba(245,158,11,0.1)" : "rgba(34,197,94,0.1)";
-                    const barColor = isExhausted ? "var(--error)" : isCritical ? "var(--warning)" : isLow ? "#f59e0b" : "var(--accent)";
-
-                    return (
-                      <div key={m.id} className="glass-panel" style={{ padding: "20px", border: `1px solid ${isExhausted || isCritical ? statusColor + "40" : "var(--border)"}` }}>
-                        {/* Top row: name + status badge */}
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "16px" }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                            <div style={{ width: 40, height: 40, borderRadius: "var(--radius-sm)", background: "var(--bg-base)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "20px", border: "1px solid var(--border)" }}>
-                              📦
-                            </div>
-                            <div>
-                              <div style={{ fontSize: "15px", fontWeight: 700 }}>{m.material.name}</div>
-                              <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "2px" }}>Unit: <strong>{m.material.unit}</strong></div>
-                            </div>
-                          </div>
-                          <span style={{ padding: "4px 12px", borderRadius: "var(--radius-full)", fontSize: "11px", fontWeight: 700, backgroundColor: statusBg, color: statusColor, border: `1px solid ${statusColor}40` }}>
-                            {isExhausted ? "🔴" : isCritical ? "⚠️" : isLow ? "🟡" : "✅"} {statusLabel}
+                      {/* Alert banner */}
+                      {(isCritical || isExhausted) && (
+                        <div style={{ 
+                          padding: "8px 12px", 
+                          background: isExhausted ? "rgba(239, 68, 68, 0.08)" : "rgba(234, 179, 8, 0.08)", 
+                          borderLeft: `3px solid ${isExhausted ? "var(--error)" : "var(--warning)"}`,
+                          borderRadius: "var(--radius-sm)", 
+                          fontSize: "12px", 
+                          color: isExhausted ? "var(--error)" : "var(--warning)",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px"
+                        }}>
+                          <span>{isExhausted ? "❌" : "⚠️"}</span>
+                          <span>
+                            {isExhausted
+                              ? `Exhausted: 100% of allocated ${m.material.name} has been consumed.`
+                              : `Critical: ${Math.round(percent)}% consumed. Only ${Math.max(0, remaining).toLocaleString()} ${m.material.unit} remaining.`}
                           </span>
                         </div>
-
-                        {/* Stats grid */}
-                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: "12px", marginBottom: "16px" }}>
-                          <div style={{ padding: "10px 14px", background: "var(--bg-base)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" }}>
-                            <div style={{ fontSize: "10px", color: "var(--text-muted)", textTransform: "uppercase", fontWeight: 600, marginBottom: "4px" }}>Allocated</div>
-                            <div style={{ fontSize: "18px", fontWeight: 800, color: "var(--text-primary)" }}>{m.allocatedQty.toLocaleString()}</div>
-                            <div style={{ fontSize: "10px", color: "var(--text-muted)" }}>{m.material.unit}</div>
-                          </div>
-                          <div style={{ padding: "10px 14px", background: "var(--bg-base)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" }}>
-                            <div style={{ fontSize: "10px", color: "var(--text-muted)", textTransform: "uppercase", fontWeight: 600, marginBottom: "4px" }}>Consumed</div>
-                            <div style={{ fontSize: "18px", fontWeight: 800, color: barColor }}>{m.consumedQty.toLocaleString()}</div>
-                            <div style={{ fontSize: "10px", color: "var(--text-muted)" }}>{m.material.unit}</div>
-                          </div>
-                          <div style={{ padding: "10px 14px", background: "var(--bg-base)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" }}>
-                            <div style={{ fontSize: "10px", color: "var(--text-muted)", textTransform: "uppercase", fontWeight: 600, marginBottom: "4px" }}>Remaining</div>
-                            <div style={{ fontSize: "18px", fontWeight: 800, color: remaining <= 0 ? "var(--error)" : "var(--text-primary)" }}>{Math.max(0, remaining).toLocaleString()}</div>
-                            <div style={{ fontSize: "10px", color: "var(--text-muted)" }}>{m.material.unit}</div>
-                          </div>
-                          <div style={{ padding: "10px 14px", background: "var(--bg-base)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" }}>
-                            <div style={{ fontSize: "10px", color: "var(--text-muted)", textTransform: "uppercase", fontWeight: 600, marginBottom: "4px" }}>Global Stock</div>
-                            <div style={{ fontSize: "18px", fontWeight: 800, color: m.material.stockCount <= m.material.minStock ? "var(--error)" : "var(--text-primary)" }}>{m.material.stockCount.toLocaleString()}</div>
-                            <div style={{ fontSize: "10px", color: "var(--text-muted)" }}>Min: {m.material.minStock}</div>
-                          </div>
-                        </div>
-
-                        {/* Progress bar */}
-                        <div style={{ marginBottom: "8px" }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "var(--text-secondary)", marginBottom: "6px" }}>
-                            <span>Consumption Progress</span>
-                            <span style={{ fontWeight: 700, color: barColor }}>{Math.min(Math.round(percent), 100)}%</span>
-                          </div>
-                          <div style={{ height: "8px", backgroundColor: "var(--border)", borderRadius: "var(--radius-full)", overflow: "hidden" }}>
-                            <div style={{ height: "100%", width: `${Math.min(percent, 100)}%`, backgroundColor: barColor, transition: "width 0.5s ease", borderRadius: "var(--radius-full)" }} />
-                          </div>
-                        </div>
-
-                        {/* Alert banner if critical/exhausted */}
-                        {(isCritical || isExhausted) && (
-                          <div style={{ marginTop: "12px", padding: "8px 12px", background: statusBg, border: `1px solid ${statusColor}40`, borderRadius: "var(--radius-sm)", fontSize: "12px", color: statusColor, display: "flex", alignItems: "center", gap: "8px" }}>
-                            <span>{isExhausted ? "🔴" : "⚠️"}</span>
-                            <span>
-                              {isExhausted
-                                ? `This material has been fully consumed. Request a restock if more ${m.material.unit} are required.`
-                                : `Only ${Math.max(0, remaining).toLocaleString()} ${m.material.unit} remaining — approaching allocation limit.`}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
         )}

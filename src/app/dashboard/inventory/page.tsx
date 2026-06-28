@@ -1,6 +1,7 @@
 import { requireAuth } from "@/lib/auth-server";
 import { prisma } from "@/lib/db";
 import { Role } from "@prisma/client";
+import { redirect } from "next/navigation";
 import InventoryDashboard from "./InventoryDashboard";
 
 export default async function InventoryPage() {
@@ -41,15 +42,16 @@ export default async function InventoryPage() {
     projectIdsUserHasAccessTo = userProjects.map(p => p.id);
   }
 
-  // 2. Fetch projects that current user can allocate to
+  // 2. Access control check - Only System Admin, General Manager, Deputy General Manager, and VP of Construction are allowed.
+  const isAllowedExecutive =
+    role === Role.SYSTEM_ADMIN ||
+    role === Role.GENERAL_MANAGER ||
+    role === Role.DEPUTY_GENERAL_MANAGER ||
+    role === Role.VP_OF_CONSTRUCTION;
+
   let projects: { id: string; name: string; code: string }[] = [];
-  if (role === Role.SITE_ENGINEER) {
-    projects = []; // Site Engineers can't allocate materials
-  } else if (role === Role.PROJECT_MANAGER) {
-    projects = await prisma.project.findMany({
-      where: { managerId: userId },
-      select: { id: true, name: true, code: true }
-    });
+  if (!isAllowedExecutive) {
+    redirect("/forbidden");
   } else {
     // Admins, GMs, DGMs, VPs can allocate to any project
     projects = await prisma.project.findMany({
@@ -60,16 +62,7 @@ export default async function InventoryPage() {
   // Serialize models into serializable formats for Client Components
   const serializedMaterials = materials.map((m) => {
     // Restrict allocations visible to user based on role and project assignments
-    const filteredAllocations = m.allocations.filter((a) => {
-      if (role === Role.SITE_ENGINEER) {
-        // Site engineer can only see allocations to their assigned projects
-        return a.project && a.project.id && projectIdsUserHasAccessTo.includes(a.project.id);
-      } else if (role === Role.PROJECT_MANAGER) {
-        // Project manager can only see allocations to their managed projects
-        return a.project && a.project.id && projectIdsUserHasAccessTo.includes(a.project.id);
-      }
-      return true;
-    });
+    const filteredAllocations = m.allocations;
 
     return {
       id: m.id,
