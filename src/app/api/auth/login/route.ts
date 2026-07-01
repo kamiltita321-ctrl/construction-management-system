@@ -58,14 +58,8 @@ export async function POST(req: NextRequest) {
     });
   } catch (error: any) {
     console.error("Login API Error:", error);
-    // Temporarily expose actual error for diagnosis — revert after fixing
     return NextResponse.json(
-      {
-        error: "An unexpected error occurred during login.",
-        _debug_message: error?.message ?? String(error),
-        _debug_cause: error?.cause?.message ?? error?.cause ?? null,
-        _debug_code: error?.cause?.originalCode ?? error?.code ?? null,
-      },
+      { error: "An unexpected error occurred during login." },
       { status: 500 }
     );
   }

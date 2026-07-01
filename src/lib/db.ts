@@ -38,8 +38,12 @@ const adapter = new PrismaMariaDb({
   ssl: {
     rejectUnauthorized: true, // Enforce TLS — required by TiDB Cloud
   },
-  connectTimeout: 10000, // 10s to survive TLS handshake latency
-  connectionLimit: 5,    // Keep low for serverless environments
+  // connectTimeout: per-socket TLS handshake deadline (ms)
+  // acquireTimeout: total time the pool waits for a usable connection (ms)
+  // Both must be generous for Vercel → TiDB Cloud cold-start latency.
+  connectTimeout: 20000,
+  acquireTimeout: 30000,
+  connectionLimit: 5, // Keep low for serverless — avoids connection exhaustion
 });
 
 let prisma: PrismaClient;
