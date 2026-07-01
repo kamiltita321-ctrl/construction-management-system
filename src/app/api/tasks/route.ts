@@ -63,9 +63,11 @@ export async function POST(req: NextRequest) {
 
     const { role, userId } = auth.session;
     
-    // Only PMs, VPs, and Admins can create tasks
+    // Only PMs, GM, DGM, VP, and Admins can create tasks
     const canCreate =
       role === Role.SYSTEM_ADMIN ||
+      role === Role.GENERAL_MANAGER ||
+      role === Role.DEPUTY_GENERAL_MANAGER ||
       role === Role.VP_OF_CONSTRUCTION ||
       role === Role.PROJECT_MANAGER;
 

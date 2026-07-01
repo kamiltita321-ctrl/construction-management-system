@@ -18,12 +18,16 @@ const NAV_ITEMS: NavLinkItem[] = [
   { name: "Reports", href: "/dashboard/reports", icon: "📝" },
 ];
 
-export default function NavLinks() {
+export default function NavLinks({ role }: { role: string }) {
   const pathname = usePathname();
+
+  const filteredItems = role === "SITE_ENGINEER" 
+    ? NAV_ITEMS.filter(item => item.name !== "Inventory")
+    : NAV_ITEMS;
 
   return (
     <nav className={styles.navSection}>
-      {NAV_ITEMS.map((item) => {
+      {filteredItems.map((item) => {
         // Match exact or parent directory paths
         const isActive =
           pathname === item.href ||

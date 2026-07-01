@@ -67,6 +67,8 @@ export async function POST(req: NextRequest) {
   try {
     const allowedRoles: Role[] = [
       Role.SYSTEM_ADMIN,
+      Role.GENERAL_MANAGER,
+      Role.DEPUTY_GENERAL_MANAGER,
       Role.VP_OF_CONSTRUCTION,
       Role.PROJECT_MANAGER,
     ];

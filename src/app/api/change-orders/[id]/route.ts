@@ -16,6 +16,7 @@ export async function PUT(
       Role.SYSTEM_ADMIN,
       Role.GENERAL_MANAGER,
       Role.DEPUTY_GENERAL_MANAGER,
+      Role.VP_OF_CONSTRUCTION,
     ];
     
     const auth = await verifyApiAuth(allowedRoles);

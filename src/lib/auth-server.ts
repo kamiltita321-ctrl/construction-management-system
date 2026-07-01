@@ -53,3 +53,15 @@ export async function verifyApiAuth(allowedRoles?: Role[]) {
     session,
   };
 }
+
+export const EXECUTIVE_ROLES: Role[] = [
+  Role.SYSTEM_ADMIN,
+  Role.GENERAL_MANAGER,
+  Role.DEPUTY_GENERAL_MANAGER,
+  Role.VP_OF_CONSTRUCTION,
+];
+
+export function isExecutive(role: Role): boolean {
+  return EXECUTIVE_ROLES.includes(role);
+}
+

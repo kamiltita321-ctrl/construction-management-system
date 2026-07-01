@@ -17,6 +17,7 @@ interface ProjectDocumentsProps {
   projectId: string;
   initialDocuments: Document[];
   defaultFileType?: string;
+  canUpload?: boolean;
 }
 
 const FILE_CATEGORIES = [
@@ -43,6 +44,7 @@ export default function ProjectDocuments({
   projectId,
   initialDocuments,
   defaultFileType = "DRAWING",
+  canUpload = true,
 }: ProjectDocumentsProps) {
   const router = useRouter();
   const [documents, setDocuments] = useState<Document[]>(initialDocuments);
@@ -137,76 +139,77 @@ export default function ProjectDocuments({
         </span>
       </div>
 
-      {/* Upload Form */}
-      <form
-        onSubmit={handleSubmit}
-        className="glass-panel"
-        style={{ padding: "20px", border: "1px dashed var(--border)" }}
-      >
-        <span style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "var(--accent)", marginBottom: "14px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-          📤 Upload New File
-        </span>
-        <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+      {canUpload && (
+        <form
+          onSubmit={handleSubmit}
+          className="glass-panel"
+          style={{ padding: "20px", border: "1px dashed var(--border)", marginBottom: "32px" }}
+        >
+          <span style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "var(--accent)", marginBottom: "14px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+            📤 Upload New File
+          </span>
+          <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+              <div>
+                <label htmlFor="doc-title" style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>
+                  File Title *
+                </label>
+                <input
+                  id="doc-title" type="text" value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="e.g. Foundation Blueprint Rev.2"
+                  style={{ width: "100%", padding: "8px 12px" }}
+                  required
+                />
+              </div>
+              <div>
+                <label htmlFor="doc-type" style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>
+                  Category *
+                </label>
+                <select
+                  id="doc-type" value={fileType}
+                  onChange={(e) => setFileType(e.target.value)}
+                  style={{ width: "100%", padding: "8px 12px" }}
+                >
+                  <option value="DRAWING">📐 Structural Drawing</option>
+                  <option value="IMAGE">📷 Site Photo / Image</option>
+                  <option value="CONTRACT">📄 Contract Document</option>
+                  <option value="REPORT">📝 Report Attachment</option>
+                  <option value="PDF">📕 PDF Reference</option>
+                </select>
+              </div>
+            </div>
+
             <div>
-              <label htmlFor="doc-title" style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>
-                File Title *
+              <label htmlFor="doc-file-input" style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>
+                Select File *
               </label>
               <input
-                id="doc-title" type="text" value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. Foundation Blueprint Rev.2"
-                style={{ width: "100%", padding: "8px 12px" }}
+                id="doc-file-input" type="file"
+                onChange={handleFileChange}
+                style={{ fontSize: "13px" }}
                 required
               />
             </div>
+
+            {message && (
+              <div style={{ fontSize: "13px", fontWeight: 500, color: message.type === "success" ? "var(--success)" : "var(--error)" }}>
+                {message.type === "success" ? "✅" : "❌"} {message.text}
+              </div>
+            )}
+
             <div>
-              <label htmlFor="doc-type" style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>
-                Category *
-              </label>
-              <select
-                id="doc-type" value={fileType}
-                onChange={(e) => setFileType(e.target.value)}
-                style={{ width: "100%", padding: "8px 12px" }}
+              <button
+                type="submit" disabled={isUploading}
+                className="btn btn-primary"
+                style={{ background: "var(--accent)", border: "none", padding: "9px 20px", fontWeight: 600, opacity: isUploading ? 0.6 : 1 }}
               >
-                <option value="DRAWING">📐 Structural Drawing</option>
-                <option value="IMAGE">📷 Site Photo / Image</option>
-                <option value="CONTRACT">📄 Contract Document</option>
-                <option value="REPORT">📝 Report Attachment</option>
-                <option value="PDF">📕 PDF Reference</option>
-              </select>
+                {isUploading ? "Uploading..." : "📤 Upload File"}
+              </button>
             </div>
           </div>
-
-          <div>
-            <label htmlFor="doc-file-input" style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>
-              Select File *
-            </label>
-            <input
-              id="doc-file-input" type="file"
-              onChange={handleFileChange}
-              style={{ fontSize: "13px" }}
-              required
-            />
-          </div>
-
-          {message && (
-            <div style={{ fontSize: "13px", fontWeight: 500, color: message.type === "success" ? "var(--success)" : "var(--error)" }}>
-              {message.type === "success" ? "✅" : "❌"} {message.text}
-            </div>
-          )}
-
-          <div>
-            <button
-              type="submit" disabled={isUploading}
-              className="btn btn-primary"
-              style={{ background: "var(--accent)", border: "none", padding: "9px 20px", fontWeight: 600, opacity: isUploading ? 0.6 : 1 }}
-            >
-              {isUploading ? "Uploading..." : "📤 Upload File"}
-            </button>
-          </div>
-        </div>
-      </form>
+        </form>
+      )}
 
       {/* Category filter tabs */}
       <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", borderBottom: "1px solid var(--border)", paddingBottom: "8px" }}>

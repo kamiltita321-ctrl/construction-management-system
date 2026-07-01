@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { verifyApiAuth } from "@/lib/auth-server";
+import { Role } from "@prisma/client";
 
-// GET /api/projects/[id]/notes - Fetch notes for a project workspace
+// GET /api/projects/[id]/notes - Fetch notes for a project workspace (role-sandboxed)
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -12,9 +13,16 @@ export async function GET(
     if (!auth.authorized) return auth.response;
 
     const { id } = await params;
+    const { role } = auth.session;
 
+    // Filter notes: only return notes authored by users who have the same system role as the current user
     const notes = await prisma.projectNote.findMany({
-      where: { projectId: id },
+      where: { 
+        projectId: id,
+        author: {
+          role: role as Role
+        }
+      },
       include: {
         author: { select: { firstName: true, lastName: true, role: true } }
       },

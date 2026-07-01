@@ -22,7 +22,7 @@ export default async function DashboardLayout({
         </div>
         
         {/* Navigation links */}
-        <NavLinks />
+        <NavLinks role={session.role as any} />
         
         {/* Sidebar Footer User Info */}
         <div className={styles.sidebarFooter}>

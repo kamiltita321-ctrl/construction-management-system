@@ -34,27 +34,30 @@ enum OrderStatus {
 }
 
 model User {
-  id            String         @id @default(uuid())
-  email         String         @unique
-  passwordHash  String
-  firstName     String
-  lastName      String
-  phone         String?
-  role          Role
-  isActive      Boolean        @default(true)
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  firstName    String
+  lastName     String
+  phone        String?
+  role         Role
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   // Relationships
-  managedProjects Project[]    @relation("ProjectManager")
-  siteProjects    Project[]    @relation("SiteEngineers")
-  assignedTasks   Task[]       @relation("TaskAssignee")
-  createdTasks    Task[]       @relation("TaskCreator")
-  reportsSubmitted DailyReport[] @relation("ReportSubmitter")
-  changeOrdersCreated ChangeOrder[] @relation("ChangeOrderRequester")
-  changeOrdersApproved ChangeOrder[] @relation("ChangeOrderApprover")
-  summaryReports   SummaryReport[] @relation("ReportCompiler")
-  projectNotes     ProjectNote[]
+  managedProjects      Project[]          @relation("ProjectManager")
+  siteProjects         Project[]          @relation("SiteEngineers")
+  assignedTasks        Task[]             @relation("TaskAssignee")
+  createdTasks         Task[]             @relation("TaskCreator")
+  reportsSubmitted     DailyReport[]      @relation("ReportSubmitter")
+  changeOrdersCreated  ChangeOrder[]      @relation("ChangeOrderRequester")
+  changeOrdersApproved ChangeOrder[]      @relation("ChangeOrderApprover")
+  summaryReports       SummaryReport[]    @relation("ReportCompiler")
+  projectNotes         ProjectNote[]
+  visitorLogsLogged    VisitorLog[]       @relation("VisitorLogger")
+  inspectionsLed       InspectionRecord[] @relation("InspectionConductor")
+  visitorLogs          VisitorLog[]
 }
 
 model Project {
@@ -71,31 +74,33 @@ model Project {
   updatedAt   DateTime      @updatedAt
 
   // Manager and Engineers
-  managerId   String
-  manager     User          @relation("ProjectManager", fields: [managerId], references: [id])
-  engineers   User[]        @relation("SiteEngineers")
+  managerId String
+  manager   User   @relation("ProjectManager", fields: [managerId], references: [id])
+  engineers User[] @relation("SiteEngineers")
 
   // Sub-modules
-  milestones  Milestone[]
-  tasks       Task[]
-  changeOrders ChangeOrder[]
-  materials   MaterialAllocation[]
-  documents   Document[]
-  dailyReports DailyReport[]
-  summaryReports SummaryReport[]
-  projectNotes   ProjectNote[]
+  milestones        Milestone[]
+  tasks             Task[]
+  changeOrders      ChangeOrder[]
+  materials         MaterialAllocation[]
+  documents         Document[]
+  dailyReports      DailyReport[]
+  summaryReports    SummaryReport[]
+  projectNotes      ProjectNote[]
+  visitorLogs       VisitorLog[]
+  inspectionRecords InspectionRecord[]
 }
 
 model Milestone {
-  id          String    @id @default(uuid())
+  id          String   @id @default(uuid())
   title       String
-  description String?   @db.Text
+  description String?  @db.Text
   dueDate     DateTime
-  isCompleted Boolean   @default(false)
+  isCompleted Boolean  @default(false)
   projectId   String
-  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model Task {
@@ -106,45 +111,45 @@ model Task {
   status      OrderStatus @default(DRAFT)
   type        String      @default("WORK_ORDER") // "WORK_ORDER" or "CHANGE_ORDER_TASK"
   progress    Int         @default(0) // 0-100 percentage
-  
-  projectId   String
-  project     Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  
-  assigneeId  String?
-  assignee    User?       @relation("TaskAssignee", fields: [assigneeId], references: [id])
-  
-  creatorId   String
-  creator     User        @relation("TaskCreator", fields: [creatorId], references: [id])
 
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  assigneeId String?
+  assignee   User?   @relation("TaskAssignee", fields: [assigneeId], references: [id])
+
+  creatorId String
+  creator   User   @relation("TaskCreator", fields: [creatorId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model ChangeOrder {
-  id             String      @id @default(uuid())
-  title          String
-  description    String      @db.Text
-  estimatedCost  Float
-  status         OrderStatus @default(PENDING_APPROVAL)
-  rejectionReason String?    @db.Text
+  id              String      @id @default(uuid())
+  title           String
+  description     String      @db.Text
+  estimatedCost   Float
+  status          OrderStatus @default(PENDING_APPROVAL)
+  rejectionReason String?     @db.Text
 
-  projectId      String
-  project        Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
-  requesterId    String
-  requester      User        @relation("ChangeOrderRequester", fields: [requesterId], references: [id])
+  requesterId String
+  requester   User   @relation("ChangeOrderRequester", fields: [requesterId], references: [id])
 
-  approverId     String?
-  approver       User?       @relation("ChangeOrderApprover", fields: [approverId], references: [id])
+  approverId String?
+  approver   User?   @relation("ChangeOrderApprover", fields: [approverId], references: [id])
 
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Material {
   id          String               @id @default(uuid())
   name        String               @unique
-  unit        String               // e.g., "bags", "tons", "meters"
+  unit        String // e.g., "bags", "tons", "meters"
   stockCount  Float                @default(0.0)
   minStock    Float                @default(0.0) // Reorder threshold
   allocations MaterialAllocation[]
@@ -152,60 +157,60 @@ model Material {
 }
 
 model MaterialAllocation {
-  id          String   @id @default(uuid())
-  projectId   String
-  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  materialId  String
-  material    Material @relation(fields: [materialId], references: [id])
+  id           String   @id @default(uuid())
+  projectId    String
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  materialId   String
+  material     Material @relation(fields: [materialId], references: [id])
   allocatedQty Float
-  consumedQty  Float   @default(0.0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  consumedQty  Float    @default(0.0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 model MaterialLog {
   id          String   @id @default(uuid())
   materialId  String
   material    Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
-  quantity    Float    // positive for restock, negative for deduction
-  actionType  String   // "STOCK_IN", "STOCK_OUT", "DAILY_REPORT_CONSUMPTION"
-  referenceId String?  // Optional relation to DailyReport or PurchaseOrder
+  quantity    Float // positive for restock, negative for deduction
+  actionType  String // "STOCK_IN", "STOCK_OUT", "DAILY_REPORT_CONSUMPTION"
+  referenceId String? // Optional relation to DailyReport or PurchaseOrder
   createdAt   DateTime @default(now())
 }
 
 model Document {
-  id          String   @id @default(uuid())
-  title       String
-  fileUrl     String
-  fileType    String   // "DRAWING", "CONTRACT", "REPORT", "IMAGE", "PDF"
-  fileSize    Int
-  projectId   String
-  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  uploadedBy  String   // User display name or ID
-  createdAt   DateTime @default(now())
+  id         String   @id @default(uuid())
+  title      String
+  fileUrl    String
+  fileType   String // "DRAWING", "CONTRACT", "REPORT", "IMAGE", "PDF"
+  fileSize   Int
+  projectId  String
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  uploadedBy String // User display name or ID
+  createdAt  DateTime @default(now())
 }
 
 model DailyReport {
-  id             String            @id @default(uuid())
-  reportDate     DateTime          // The operational date this report represents
-  workCompleted  String            @db.Text
-  issuesFaced    String?           @db.Text
-  weather        String?
-  
-  projectId      String
-  project        Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  
-  submitterId    String
-  submitter      User              @relation("ReportSubmitter", fields: [submitterId], references: [id])
-  
-  isApproved     Boolean           @default(false)
-  approvedBy     String?
+  id            String   @id @default(uuid())
+  reportDate    DateTime // The operational date this report represents
+  workCompleted String   @db.Text
+  issuesFaced   String?  @db.Text
+  weather       String?
 
-  photos         ReportPhoto[]
-  materialUsage  ReportMaterialUsage[]
-  
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  submitterId String
+  submitter   User   @relation("ReportSubmitter", fields: [submitterId], references: [id])
+
+  isApproved Boolean @default(false)
+  approvedBy String?
+
+  photos        ReportPhoto[]
+  materialUsage ReportMaterialUsage[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([projectId, reportDate]) // One daily report per project per day
 }
@@ -222,26 +227,26 @@ model ReportMaterialUsage {
   id            String      @id @default(uuid())
   dailyReportId String
   dailyReport   DailyReport @relation(fields: [dailyReportId], references: [id], onDelete: Cascade)
-  materialName  String      // Store name directly to guard against material deletion histories
+  materialName  String // Store name directly to guard against material deletion histories
   quantityUsed  Float
 }
 
 model SummaryReport {
-  id           String    @id @default(uuid())
-  title        String    // e.g., "Weekly Report - Week 23 (2026)" or "Monthly Report - May"
-  reportType   String    // "WEEKLY" or "MONTHLY"
-  startDate    DateTime
-  endDate      DateTime
-  commentary   String?   @db.Text // Custom feedback/commentary input by PM before compilation
-  
-  projectId    String
-  project      Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  
-  compilerId   String
-  compiler     User      @relation("ReportCompiler", fields: [compilerId], references: [id])
-  
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id         String   @id @default(uuid())
+  title      String // e.g., "Weekly Report - Week 23 (2026)" or "Monthly Report - May"
+  reportType String // "WEEKLY" or "MONTHLY"
+  startDate  DateTime
+  endDate    DateTime
+  commentary String?  @db.Text // Custom feedback/commentary input by PM before compilation
+
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  compilerId String
+  compiler   User   @relation("ReportCompiler", fields: [compilerId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Activity {
@@ -310,4 +315,36 @@ model ProjectNote {
   updatedAt DateTime @updatedAt
 }
 
+model VisitorLog {
+  id            String   @id @default(uuid())
+  visitorName   String
+  organization  String?
+  purpose       String // "INSPECTION", "CLIENT_REVIEW", "REGULATORY_AUDIT", "MATERIAL_DELIVERY", "SAFETY_WALKTHROUGH", "OTHER"
+  visitDatetime DateTime
+  badgeNumber   String?
+  remarks       String?  @db.Text
+  escortedById  String?
+  escortedBy    User?    @relation(fields: [escortedById], references: [id])
+  projectId     String
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  loggedById    String
+  loggedBy      User     @relation("VisitorLogger", fields: [loggedById], references: [id])
+  createdAt     DateTime @default(now())
+}
 
+model InspectionRecord {
+  id             String    @id @default(uuid())
+  inspectionType String // "STRUCTURAL_SAFETY", "QUALITY_CONTROL", etc.
+  inspectorName  String
+  inspectionDate DateTime
+  area           String
+  outcome        String // "PASSED", "FAILED", "CONDITIONAL", "PENDING"
+  followUpDate   DateTime?
+  findings       String?   @db.Text
+  projectId      String
+  project        Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  conductedById  String
+  conductedBy    User      @relation("InspectionConductor", fields: [conductedById], references: [id])
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}

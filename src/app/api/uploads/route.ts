@@ -9,6 +9,14 @@ export async function POST(req: NextRequest) {
     const auth = await verifyApiAuth();
     if (!auth.authorized) return auth.response;
 
+    const { role } = auth.session;
+    if (role === "SITE_ENGINEER") {
+      return NextResponse.json(
+        { error: "Access denied. Site Engineers are restricted to read-only access for documents." },
+        { status: 403 }
+      );
+    }
+
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
     const title = formData.get("title") as string | null;

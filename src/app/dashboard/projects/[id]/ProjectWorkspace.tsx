@@ -163,7 +163,174 @@ export default function ProjectWorkspace({
 
   const isSE = currentUser.role === "SITE_ENGINEER";
   const isPM = currentUser.role === "PROJECT_MANAGER";
-  const canModifyTasks = currentUser.role === "SYSTEM_ADMIN" || currentUser.role === "VP_OF_CONSTRUCTION" || isPM;
+  
+  // Tasks (work orders) can be modified by: Admin, GM, DGM, VP, or Project Manager
+  const canModifyTasks =
+    currentUser.role === "SYSTEM_ADMIN" ||
+    currentUser.role === "GENERAL_MANAGER" ||
+    currentUser.role === "DEPUTY_GENERAL_MANAGER" ||
+    currentUser.role === "VP_OF_CONSTRUCTION" ||
+    isPM;
+
+  // Change orders can be approved by: Admin, GM, DGM, VP
+  const canApproveCO =
+    currentUser.role === "SYSTEM_ADMIN" ||
+    currentUser.role === "GENERAL_MANAGER" ||
+    currentUser.role === "DEPUTY_GENERAL_MANAGER" ||
+    currentUser.role === "VP_OF_CONSTRUCTION";
+
+  // Change orders can be requested by: Admin, GM, DGM, VP, or PM
+  const canRequestCO =
+    currentUser.role === "SYSTEM_ADMIN" ||
+    currentUser.role === "GENERAL_MANAGER" ||
+    currentUser.role === "DEPUTY_GENERAL_MANAGER" ||
+    currentUser.role === "VP_OF_CONSTRUCTION" ||
+    isPM;
+
+  // Visitors & Inspections states
+  interface Visitor {
+    id: string;
+    visitorName: string;
+    organization: string | null;
+    purpose: string;
+    visitDatetime: string;
+    badgeNumber: string | null;
+    remarks: string | null;
+    escortedBy: { firstName: string; lastName: string } | null;
+    loggedBy: { firstName: string; lastName: string };
+  }
+
+  interface Inspection {
+    id: string;
+    inspectionType: string;
+    inspectorName: string;
+    inspectionDate: string;
+    area: string;
+    outcome: string;
+    followUpDate: string | null;
+    findings: string | null;
+    conductedBy: { firstName: string; lastName: string };
+  }
+
+  const [visitors, setVisitors] = useState<Visitor[]>([]);
+  const [visitorsLoading, setVisitorsLoading] = useState(false);
+  const [visitorName, setVisitorName] = useState("");
+  const [visitorOrg, setVisitorOrg] = useState("");
+  const [visitorPurpose, setVisitorPurpose] = useState("Inspection");
+  const [visitorDatetime, setVisitorDatetime] = useState("");
+  const [visitorBadge, setVisitorBadge] = useState("");
+  const [visitorEscortId, setVisitorEscortId] = useState("");
+  const [visitorRemarks, setVisitorRemarks] = useState("");
+
+  const [inspections, setInspections] = useState<Inspection[]>([]);
+  const [inspectionsLoading, setInspectionsLoading] = useState(false);
+  const [inspectionType, setInspectionType] = useState("Structural Safety");
+  const [inspectorNameField, setInspectorNameField] = useState("");
+  const [inspectionDate, setInspectionDate] = useState("");
+  const [inspectionArea, setInspectionArea] = useState("");
+  const [inspectionOutcome, setInspectionOutcome] = useState("PASSED");
+  const [inspectionFollowUp, setInspectionFollowUp] = useState("");
+  const [inspectionFindings, setInspectionFindings] = useState("");
+
+  // Load Visitors & Inspections
+  useEffect(() => {
+    if (activeTab === "daily-logs") {
+      if (dailySubTab === "visitors") {
+        setVisitorsLoading(true);
+        fetch(`/api/projects/${project.id}/visitors`)
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.visitors) setVisitors(data.visitors);
+          })
+          .catch((err) => console.error("Error fetching visitors:", err))
+          .finally(() => setVisitorsLoading(false));
+      } else if (dailySubTab === "inspection") {
+        setInspectionsLoading(true);
+        fetch(`/api/projects/${project.id}/inspections`)
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.inspections) setInspections(data.inspections);
+          })
+          .catch((err) => console.error("Error fetching inspections:", err))
+          .finally(() => setInspectionsLoading(false));
+      }
+    }
+  }, [activeTab, dailySubTab, project.id]);
+
+  const handleCreateVisitor = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!visitorName || !visitorPurpose || !visitorDatetime) return;
+    setIsLoading(true);
+    try {
+      const res = await fetch(`/api/projects/${project.id}/visitors`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          visitorName,
+          organization: visitorOrg || null,
+          purpose: visitorPurpose,
+          visitDatetime: visitorDatetime,
+          badgeNumber: visitorBadge || null,
+          remarks: visitorRemarks || null,
+          escortedById: visitorEscortId || null,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setVisitors([data.visitor, ...visitors]);
+        setVisitorName("");
+        setVisitorOrg("");
+        setVisitorPurpose("Inspection");
+        setVisitorDatetime("");
+        setVisitorBadge("");
+        setVisitorEscortId("");
+        setVisitorRemarks("");
+      } else {
+        alert(data.error || "Failed to log visitor");
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleCreateInspection = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inspectionType || !inspectorNameField || !inspectionDate || !inspectionArea || !inspectionOutcome) return;
+    setIsLoading(true);
+    try {
+      const res = await fetch(`/api/projects/${project.id}/inspections`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          inspectionType,
+          inspectorName: inspectorNameField,
+          inspectionDate,
+          area: inspectionArea,
+          outcome: inspectionOutcome,
+          followUpDate: inspectionFollowUp || null,
+          findings: inspectionFindings || null,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setInspections([data.inspection, ...inspections]);
+        setInspectorNameField("");
+        setInspectionDate("");
+        setInspectionArea("");
+        setInspectionOutcome("PASSED");
+        setInspectionFollowUp("");
+        setInspectionFindings("");
+      } else {
+        alert(data.error || "Failed to save inspection");
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Task handlers
   const handleTaskStatusChange = async (taskId: string, newStatus: string, currentProgress: number) => {
@@ -375,9 +542,9 @@ export default function ProjectWorkspace({
       <div style={{ display: "flex", borderBottom: "1px solid var(--border)", gap: "8px", overflowX: "auto", paddingBottom: "4px" }}>
         {[
           { id: "dashboard",   label: "📊 Overview" },
-          { id: "crew",        label: "👷 Team" },
+          ...(isSE ? [] : [{ id: "crew",        label: "👷 Team" }]),
           { id: "daily-logs",  label: "📋 Daily Logs" },
-          { id: "inventory",   label: "📦 Inventory" },
+          ...(isSE ? [] : [{ id: "inventory",   label: "📦 Inventory" }]),
           { id: "reports",     label: "📝 Reports" },
           { id: "documents",   label: "📁 Documents" },
           { id: "schedule",    label: "📅 Schedule" },
@@ -446,7 +613,7 @@ export default function ProjectWorkspace({
         )}
 
         {/* TEAM */}
-        {activeTab === "crew" && (
+        {!isSE && activeTab === "crew" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
             <h4 style={{ fontSize: "16px", fontWeight: 700 }}>Project Team</h4>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "16px" }}>
@@ -520,10 +687,12 @@ export default function ProjectWorkspace({
                               <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", marginTop: "8px", color: "var(--text-muted)" }}>
                                 <span>📅 {task.dueDate}</span><span>👤 {task.assignee ? task.assignee.firstName : "Unassigned"}</span>
                               </div>
-                              <div style={{ display: "flex", gap: "4px", marginTop: "8px", borderTop: "1px solid var(--border)", paddingTop: "8px" }}>
-                                {task.status !== "DRAFT" && <button onClick={() => { const s = ["DRAFT","PENDING_APPROVAL","APPROVED","IN_PROGRESS","COMPLETED"]; const i = s.indexOf(task.status); if (i > 0) handleTaskStatusChange(task.id, s[i-1], task.progress); }} style={{ flex: 1, padding: "2px", fontSize: "9px" }} className="btn btn-secondary">◀</button>}
-                                {task.status !== "COMPLETED" && <button onClick={() => { const s = ["DRAFT","PENDING_APPROVAL","APPROVED","IN_PROGRESS","COMPLETED"]; const i = s.indexOf(task.status); if (i < s.length-1) handleTaskStatusChange(task.id, s[i+1], task.progress); }} style={{ flex: 1, padding: "2px", fontSize: "9px" }} className="btn btn-secondary">▶</button>}
-                              </div>
+                              {(!isSE || task.assigneeId === currentUser.id) && (
+                                <div style={{ display: "flex", gap: "4px", marginTop: "8px", borderTop: "1px solid var(--border)", paddingTop: "8px" }}>
+                                  {task.status !== "DRAFT" && <button onClick={() => { const s = ["DRAFT","PENDING_APPROVAL","APPROVED","IN_PROGRESS","COMPLETED"]; const i = s.indexOf(task.status); if (i > 0) handleTaskStatusChange(task.id, s[i-1], task.progress); }} style={{ flex: 1, padding: "2px", fontSize: "9px" }} className="btn btn-secondary">◀</button>}
+                                  {task.status !== "COMPLETED" && <button onClick={() => { const s = ["DRAFT","PENDING_APPROVAL","APPROVED","IN_PROGRESS","COMPLETED"]; const i = s.indexOf(task.status); if (i < s.length-1) handleTaskStatusChange(task.id, s[i+1], task.progress); }} style={{ flex: 1, padding: "2px", fontSize: "9px" }} className="btn btn-secondary">▶</button>}
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>
@@ -542,7 +711,7 @@ export default function ProjectWorkspace({
                     <h4 style={{ fontSize: "16px", fontWeight: 700 }}>Change Orders</h4>
                     <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginTop: "4px" }}>Requests for deviations from the approved scope, budget, or schedule.</p>
                   </div>
-                  {isSE && <button onClick={() => setIsCOModalOpen(true)} className="btn btn-primary" style={{ backgroundColor: "var(--accent)", border: "none" }}>+ Request Change Order</button>}
+                  {canRequestCO && <button onClick={() => setIsCOModalOpen(true)} className="btn btn-primary" style={{ backgroundColor: "var(--accent)", border: "none" }}>+ Request Change Order</button>}
                 </div>
                 {changeOrders.length === 0 ? (
                   <div className="glass-panel" style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)" }}><div style={{ fontSize: "36px", marginBottom: "8px" }}>💸</div><p>No change orders yet.</p></div>
@@ -563,7 +732,7 @@ export default function ProjectWorkspace({
                           </div>
                           <div style={{ display: "flex", flexDirection: "column", gap: "8px", alignItems: "flex-end" }}>
                             <span style={{ padding: "4px 10px", fontSize: "10px", fontWeight: 700, borderRadius: "var(--radius-full)", ...badgeStyle }}>{co.status.replace(/_/g, " ")}</span>
-                            {isPM && co.status === "PENDING_APPROVAL" && (
+                            {canApproveCO && co.status === "PENDING_APPROVAL" && (
                               <div style={{ display: "flex", gap: "8px" }}>
                                 <button onClick={() => { setActiveCoId(co.id); setCoRejectionModalOpen(true); }} className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: "11px", borderColor: "var(--error)", color: "var(--error)" }}>Reject</button>
                                 <button onClick={() => handleApproveCO(co.id)} className="btn btn-primary" style={{ padding: "4px 10px", fontSize: "11px", backgroundColor: "var(--success)", border: "none" }}>Approve</button>
@@ -590,8 +759,8 @@ export default function ProjectWorkspace({
                   </form>
                 </div>
                 <div className="glass-panel" style={{ padding: "24px" }}>
-                  <h4 style={{ fontSize: "14px", fontWeight: 700, marginBottom: "16px" }}>Project Notes Log</h4>
-                  {notesLoading ? <div style={{ textAlign: "center", color: "var(--text-secondary)" }}>Loading...</div> : notes.length === 0 ? <p style={{ color: "var(--text-muted)", fontSize: "13px" }}>No notes yet.</p> : (
+                  <h4 style={{ fontSize: "14px", fontWeight: 700, marginBottom: "16px" }}>Project Notes Log (Sandboxed)</h4>
+                  {notesLoading ? <div style={{ textAlign: "center", color: "var(--text-secondary)" }}>Loading...</div> : notes.length === 0 ? <p style={{ color: "var(--text-muted)", fontSize: "13px" }}>No notes yet for your system role.</p> : (
                     <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
                       {notes.map(n => (
                         <div key={n.id} style={{ padding: "14px", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", background: "var(--bg-base)" }}>
@@ -616,20 +785,45 @@ export default function ProjectWorkspace({
                   <h4 style={{ fontSize: "16px", fontWeight: 700 }}>Site Visitor Log</h4>
                   <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginTop: "4px" }}>Record all visitors who access the construction site for safety and compliance.</p>
                 </div>
-                <div className="glass-panel" style={{ padding: "24px", border: "1px dashed var(--border)" }}>
-                  <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--accent)", textTransform: "uppercase", letterSpacing: "0.5px" }}>👥 Log New Visitor</span>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px", marginTop: "16px" }}>
-                    <div><label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Visitor Name *</label><input type="text" placeholder="Full name" style={{ width: "100%", padding: "8px 12px" }} /></div>
-                    <div><label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Organization</label><input type="text" placeholder="Company or agency" style={{ width: "100%", padding: "8px 12px" }} /></div>
-                    <div><label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Purpose of Visit *</label><select style={{ width: "100%", padding: "8px 12px" }}><option>Inspection</option><option>Client Review</option><option>Regulatory Audit</option><option>Material Delivery</option><option>Safety Walkthrough</option><option>Other</option></select></div>
-                    <div><label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Date &amp; Time *</label><input type="datetime-local" style={{ width: "100%", padding: "8px 12px" }} /></div>
-                    <div><label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Badge / ID Number</label><input type="text" placeholder="Visitor ID or badge #" style={{ width: "100%", padding: "8px 12px" }} /></div>
-                    <div><label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Escorted By</label><select style={{ width: "100%", padding: "8px 12px" }}><option value="">Select crew member...</option>{project.engineers.map(e => <option key={e.id} value={e.id}>{e.firstName} {e.lastName}</option>)}</select></div>
+                {isPM && (
+                  <div className="glass-panel" style={{ padding: "24px", border: "1px dashed var(--border)" }}>
+                    <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--accent)", textTransform: "uppercase", letterSpacing: "0.5px" }}>👥 Log New Visitor</span>
+                    <form onSubmit={handleCreateVisitor}>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px", marginTop: "16px" }}>
+                        <div><label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Visitor Name *</label><input type="text" required placeholder="Full name" style={{ width: "100%", padding: "8px 12px" }} value={visitorName} onChange={e => setVisitorName(e.target.value)} /></div>
+                        <div><label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Organization</label><input type="text" placeholder="Company or agency" style={{ width: "100%", padding: "8px 12px" }} value={visitorOrg} onChange={e => setVisitorOrg(e.target.value)} /></div>
+                        <div><label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Purpose of Visit *</label><select style={{ width: "100%", padding: "8px 12px" }} value={visitorPurpose} onChange={e => setVisitorPurpose(e.target.value)}><option value="INSPECTION">Inspection</option><option value="CLIENT_REVIEW">Client Review</option><option value="REGULATORY_AUDIT">Regulatory Audit</option><option value="MATERIAL_DELIVERY">Material Delivery</option><option value="SAFETY_WALKTHROUGH">Safety Walkthrough</option><option value="OTHER">Other</option></select></div>
+                        <div><label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Date &amp; Time *</label><input type="datetime-local" required style={{ width: "100%", padding: "8px 12px" }} value={visitorDatetime} onChange={e => setVisitorDatetime(e.target.value)} /></div>
+                        <div><label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Badge / ID Number</label><input type="text" placeholder="Visitor ID or badge #" style={{ width: "100%", padding: "8px 12px" }} value={visitorBadge} onChange={e => setVisitorBadge(e.target.value)} /></div>
+                        <div><label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Escorted By</label><select style={{ width: "100%", padding: "8px 12px" }} value={visitorEscortId} onChange={e => setVisitorEscortId(e.target.value)}><option value="">Select crew member...</option>{project.engineers.map(e => <option key={e.id} value={e.id}>{e.firstName} {e.lastName}</option>)}</select></div>
+                      </div>
+                      <div style={{ marginTop: "16px" }}><label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Remarks</label><textarea rows={2} placeholder="Any notes about this visit..." style={{ width: "100%", padding: "8px 12px", fontFamily: "inherit" }} value={visitorRemarks} onChange={e => setVisitorRemarks(e.target.value)} /></div>
+                      <button type="submit" className="btn btn-primary" style={{ marginTop: "16px", backgroundColor: "var(--accent)", border: "none" }} disabled={isLoading}>{isLoading ? "Saving..." : "Log Visitor Entry"}</button>
+                    </form>
                   </div>
-                  <div style={{ marginTop: "16px" }}><label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Remarks</label><textarea rows={2} placeholder="Any notes about this visit..." style={{ width: "100%", padding: "8px 12px", fontFamily: "inherit" }} /></div>
-                  <button className="btn btn-primary" style={{ marginTop: "16px", backgroundColor: "var(--accent)", border: "none" }}>✅ Log Visitor Entry</button>
+                )}
+                
+                <div className="glass-panel" style={{ padding: "24px" }}>
+                  <h4 style={{ fontSize: "14px", fontWeight: 700, marginBottom: "16px" }}>Visitor History</h4>
+                  {visitorsLoading ? <div style={{ color: "var(--text-secondary)", fontSize: "13px" }}>Loading...</div> : visitors.length === 0 ? <p style={{ color: "var(--text-muted)", fontSize: "13px" }}>No visitors logged yet for this project.</p> : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                      {visitors.map(v => (
+                        <div key={v.id} style={{ padding: "14px", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", background: "var(--bg-base)" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                            <h5 style={{ fontWeight: 700, fontSize: "14px" }}>{v.visitorName} {v.organization && <span style={{ fontWeight: 400, opacity: 0.6 }}>({v.organization})</span>}</h5>
+                            <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>{new Date(v.visitDatetime).toLocaleString()}</span>
+                          </div>
+                          <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Purpose: <strong>{v.purpose.replace(/_/g, " ")}</strong></div>
+                          {v.remarks && <p style={{ fontSize: "12px", marginTop: "6px", fontStyle: "italic" }}>{v.remarks}</p>}
+                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", color: "var(--text-muted)", marginTop: "8px", borderTop: "1px solid var(--border)", paddingTop: "6px" }}>
+                            <span>Escort: {v.escortedBy ? `${v.escortedBy.firstName} ${v.escortedBy.lastName}` : "None"}</span>
+                            <span>Logged By: {v.loggedBy.firstName} {v.loggedBy.lastName}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <div className="glass-panel" style={{ padding: "24px", textAlign: "center", color: "var(--text-muted)" }}><p style={{ fontSize: "13px", padding: "20px" }}>No visitors logged yet for this project.</p></div>
               </div>
             )}
 
@@ -640,27 +834,50 @@ export default function ProjectWorkspace({
                   <h4 style={{ fontSize: "16px", fontWeight: 700 }}>Site Inspection Records</h4>
                   <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginTop: "4px" }}>Document site inspections, safety audits, and quality checks.</p>
                 </div>
-                <div className="glass-panel" style={{ padding: "24px", border: "1px dashed var(--border)" }}>
-                  <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--accent)", textTransform: "uppercase", letterSpacing: "0.5px" }}>🔍 New Inspection Record</span>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px", marginTop: "16px" }}>
-                    <div><label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Inspection Type *</label><select style={{ width: "100%", padding: "8px 12px" }}><option>Structural Safety</option><option>Quality Control (QC)</option><option>Environmental Compliance</option><option>Fire &amp; Life Safety</option><option>Material Acceptance</option><option>Final Walkthrough</option><option>Other</option></select></div>
-                    <div><label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Inspector Name *</label><input type="text" placeholder="Full name of inspector" style={{ width: "100%", padding: "8px 12px" }} /></div>
-                    <div><label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Inspection Date *</label><input type="date" style={{ width: "100%", padding: "8px 12px" }} /></div>
-                    <div><label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Area / Zone *</label><input type="text" placeholder="e.g. Foundation, Block A" style={{ width: "100%", padding: "8px 12px" }} /></div>
-                    <div><label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Outcome *</label><select style={{ width: "100%", padding: "8px 12px" }}><option value="PASSED">✅ Passed</option><option value="FAILED">❌ Failed — Action Required</option><option value="CONDITIONAL">⚠️ Conditional Pass</option><option value="PENDING">⏳ Pending Review</option></select></div>
-                    <div><label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Follow-up Due Date</label><input type="date" style={{ width: "100%", padding: "8px 12px" }} /></div>
+                {isSE && (
+                  <div className="glass-panel" style={{ padding: "24px", border: "1px dashed var(--border)" }}>
+                    <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--accent)", textTransform: "uppercase", letterSpacing: "0.5px" }}>🔍 New Inspection Record</span>
+                    <form onSubmit={handleCreateInspection}>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px", marginTop: "16px" }}>
+                        <div><label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Inspection Type *</label><select style={{ width: "100%", padding: "8px 12px" }} value={inspectionType} onChange={e => setInspectionType(e.target.value)}><option value="STRUCTURAL_SAFETY">Structural Safety</option><option value="QUALITY_CONTROL">Quality Control (QC)</option><option value="ENVIRONMENTAL_COMPLIANCE">Environmental Compliance</option><option value="FIRE_LIFE_SAFETY">Fire &amp; Life Safety</option><option value="MATERIAL_ACCEPTANCE">Material Acceptance</option><option value="FINAL_WALKTHROUGH">Final Walkthrough</option><option value="OTHER">Other</option></select></div>
+                        <div><label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Inspector Name *</label><input type="text" required placeholder="Full name of inspector" style={{ width: "100%", padding: "8px 12px" }} value={inspectorNameField} onChange={e => setInspectorNameField(e.target.value)} /></div>
+                        <div><label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Inspection Date *</label><input type="date" required style={{ width: "100%", padding: "8px 12px" }} value={inspectionDate} onChange={e => setInspectionDate(e.target.value)} /></div>
+                        <div><label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Area / Zone *</label><input type="text" required placeholder="e.g. Foundation, Block A" style={{ width: "100%", padding: "8px 12px" }} value={inspectionArea} onChange={e => setInspectionArea(e.target.value)} /></div>
+                        <div><label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Outcome *</label><select style={{ width: "100%", padding: "8px 12px" }} value={inspectionOutcome} onChange={e => setInspectionOutcome(e.target.value)}><option value="PASSED">Passed</option><option value="FAILED">Failed — Action Required</option><option value="CONDITIONAL">Conditional Pass</option><option value="PENDING">Pending Review</option></select></div>
+                        <div><label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Follow-up Due Date</label><input type="date" style={{ width: "100%", padding: "8px 12px" }} value={inspectionFollowUp} onChange={e => setInspectionFollowUp(e.target.value)} /></div>
+                      </div>
+                      <div style={{ marginTop: "16px" }}><label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Findings &amp; Notes</label><textarea rows={3} placeholder="Describe findings or recommendations..." style={{ width: "100%", padding: "8px 12px", fontFamily: "inherit" }} value={inspectionFindings} onChange={e => setInspectionFindings(e.target.value)} /></div>
+                      <button type="submit" className="btn btn-primary" style={{ marginTop: "16px", backgroundColor: "var(--accent)", border: "none" }} disabled={isLoading}>{isLoading ? "Saving..." : "Save Inspection Record"}</button>
+                    </form>
                   </div>
-                  <div style={{ marginTop: "16px" }}><label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Findings &amp; Notes</label><textarea rows={3} placeholder="Describe findings or recommendations..." style={{ width: "100%", padding: "8px 12px", fontFamily: "inherit" }} /></div>
-                  <button className="btn btn-primary" style={{ marginTop: "16px", backgroundColor: "var(--accent)", border: "none" }}>✅ Save Inspection Record</button>
+                )}
+                
+                <div className="glass-panel" style={{ padding: "24px" }}>
+                  <h4 style={{ fontSize: "14px", fontWeight: 700, marginBottom: "16px" }}>Inspection Logs</h4>
+                  {inspectionsLoading ? <div style={{ color: "var(--text-secondary)", fontSize: "13px" }}>Loading...</div> : inspections.length === 0 ? <p style={{ color: "var(--text-muted)", fontSize: "13px" }}>No inspection records logged yet.</p> : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                      {inspections.map(ins => (
+                        <div key={ins.id} style={{ padding: "14px", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", background: "var(--bg-base)" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                            <h5 style={{ fontWeight: 700, fontSize: "14px" }}>{ins.inspectionType.replace(/_/g, " ")} <span style={{ fontSize: "11px", fontWeight: 600, padding: "2px 6px", borderRadius: "var(--radius-sm)", backgroundColor: ins.outcome === "PASSED" ? "rgba(34,197,94,0.15)" : ins.outcome === "FAILED" ? "rgba(239,68,68,0.15)" : "rgba(234,179,8,0.15)", color: ins.outcome === "PASSED" ? "var(--success)" : ins.outcome === "FAILED" ? "var(--error)" : "var(--warning)" }}>{ins.outcome}</span></h5>
+                            <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>{ins.inspectionDate}</span>
+                          </div>
+                          <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Inspector: <strong>{ins.inspectorName}</strong> | Zone: <strong>{ins.area}</strong></div>
+                          {ins.findings && <p style={{ fontSize: "12px", marginTop: "6px" }}>{ins.findings}</p>}
+                          {ins.followUpDate && <div style={{ fontSize: "11px", color: "var(--warning)", marginTop: "4px" }}>⚠️ Follow-up Due: {ins.followUpDate}</div>}
+                          <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: "8px", borderTop: "1px solid var(--border)", paddingTop: "6px", textAlign: "right" }}>Conducted By: {ins.conductedBy.firstName} {ins.conductedBy.lastName}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <div className="glass-panel" style={{ padding: "24px", textAlign: "center", color: "var(--text-muted)" }}><p style={{ fontSize: "13px", padding: "20px" }}>No inspection records logged yet.</p></div>
               </div>
             )}
           </div>
         )}
 
         {/* INVENTORY */}
-        {activeTab === "inventory" && (
+        {!isSE && activeTab === "inventory" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
             {/* Header */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border)", paddingBottom: "12px" }}>
@@ -763,18 +980,24 @@ export default function ProjectWorkspace({
         {/* REPORTS */}
         {activeTab === "reports" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-            <div>
-              <h4 style={{ fontSize: "16px", fontWeight: 700 }}>Weekly &amp; Monthly Compiled Reports</h4>
-              <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginTop: "4px" }}>Project Managers compile and annotate weekly and monthly summary reports from daily logs.</p>
-            </div>
-            <SummaryDashboard initialSummaries={initialSummaries.filter(s => s.project.id === project.id)} projects={[project as any]} currentUser={{ role: currentUser.role }} />
+            {isSE ? (
+              <p style={{ color: "var(--text-muted)", fontSize: "13px" }}>Site Engineers do not have compilation or read access to high-level Weekly &amp; Monthly Reports.</p>
+            ) : (
+              <>
+                <div>
+                  <h4 style={{ fontSize: "16px", fontWeight: 700 }}>Weekly &amp; Monthly Compiled Reports</h4>
+                  <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginTop: "4px" }}>Project Managers compile and annotate weekly and monthly summary reports from daily logs.</p>
+                </div>
+                <SummaryDashboard initialSummaries={initialSummaries.filter(s => s.project.id === project.id)} projects={[project as any]} currentUser={{ role: currentUser.role }} />
+              </>
+            )}
           </div>
         )}
 
         {/* DOCUMENTS — unified with category tabs */}
         {activeTab === "documents" && (
           <section className="glass-panel" style={{ padding: "24px" }}>
-            <ProjectDocuments projectId={project.id} initialDocuments={project.documents} />
+            <ProjectDocuments projectId={project.id} initialDocuments={project.documents} canUpload={!isSE} />
           </section>
         )}
 

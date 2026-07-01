@@ -42,27 +42,40 @@ export default async function InventoryPage() {
     projectIdsUserHasAccessTo = userProjects.map(p => p.id);
   }
 
-  // 2. Access control check - Only System Admin, General Manager, Deputy General Manager, and VP of Construction are allowed.
+  // 2. Access control check - Executives get global, PMs get project-scoped, SE is blocked
   const isAllowedExecutive =
     role === Role.SYSTEM_ADMIN ||
     role === Role.GENERAL_MANAGER ||
     role === Role.DEPUTY_GENERAL_MANAGER ||
     role === Role.VP_OF_CONSTRUCTION;
 
-  let projects: { id: string; name: string; code: string }[] = [];
-  if (!isAllowedExecutive) {
+  const isAllowedPM = role === Role.PROJECT_MANAGER;
+
+  if (!isAllowedExecutive && !isAllowedPM) {
     redirect("/forbidden");
-  } else {
+  }
+
+  let projects: { id: string; name: string; code: string }[] = [];
+  if (isAllowedExecutive) {
     // Admins, GMs, DGMs, VPs can allocate to any project
     projects = await prisma.project.findMany({
       select: { id: true, name: true, code: true }
     });
+  } else if (isAllowedPM) {
+    // PMs see projects they manage
+    projects = await prisma.project.findMany({
+      where: { managerId: userId },
+      select: { id: true, name: true, code: true }
+    });
   }
 
-  // Serialize models into serializable formats for Client Components
+  // Filter materials allocations for PMs down to their project ids
   const serializedMaterials = materials.map((m) => {
-    // Restrict allocations visible to user based on role and project assignments
-    const filteredAllocations = m.allocations;
+    const filteredAllocations = m.allocations.filter((a) => {
+      if (isAllowedExecutive) return true;
+      if (isAllowedPM) return projectIdsUserHasAccessTo.includes(a.projectId);
+      return false;
+    });
 
     return {
       id: m.id,
