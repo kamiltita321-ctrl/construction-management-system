@@ -12,6 +12,8 @@
   },
   "dependencies": {
     "@prisma/adapter-mariadb": "^7.8.0",
+    "@tidbcloud/prisma-adapter": "^6.17.0",
+    "@tidbcloud/serverless": "^0.3.0",
     "dotenv": "^17.4.2",
     "mariadb": "^3.5.2",
     "next": "16.2.7",

@@ -1,10 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Tell Next.js (and Vercel) NOT to bundle these packages — let Node.js
-  // resolve them at runtime. The mariadb driver uses native Net/TLS sockets
-  // which cannot be bundled by the Next.js webpack/turbopack bundler.
-  serverExternalPackages: ["mariadb", "@prisma/adapter-mariadb"],
+  // @tidbcloud/serverless uses HTTPS (port 443) — no special external packages
+  // needed. The mariadb TCP driver has been replaced entirely.
+  serverExternalPackages: ["@prisma/client", "@tidbcloud/prisma-adapter"],
 };
 
 export default nextConfig;

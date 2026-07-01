@@ -1,71 +1,40 @@
-import { PrismaMariaDb } from "@prisma/adapter-mariadb";
+import { connect } from "@tidbcloud/serverless";
+import { PrismaTiDBCloud } from "@tidbcloud/prisma-adapter";
 import { PrismaClient } from "@prisma/client";
 
 const databaseUrl = process.env.DATABASE_URL;
 
 if (!databaseUrl) {
   throw new Error(
-    "DATABASE_URL is not set in the environment variables. " +
-      "For local dev, add it to .env. For Vercel, add it to your project's Environment Variables."
+    "DATABASE_URL is not set. Add it in Vercel → Settings → Environment Variables."
   );
 }
 
-// Parse credentials from the connection URL
-const dbUrl = new URL(databaseUrl);
-
 /**
- * Pass the config object directly to PrismaMariaDb (the factory).
+ * Use TiDB Cloud's official HTTP-based serverless driver instead of the
+ * mariadb TCP driver. The mariadb driver uses persistent TCP connections
+ * which are fundamentally incompatible with Vercel's Lambda-style serverless
+ * functions — they cannot maintain open TCP sockets between invocations.
  *
- * DO NOT pre-create a pool with mariadb.createPool and pass it here.
- * PrismaMariaDb always calls mariadb.createPool() internally on connect().
- * If you pass an existing pool object, the adapter spreads it into a plain
- * config object, losing all host/user/password/ssl settings and falling back
- * to localhost defaults.
+ * @tidbcloud/serverless communicates over HTTPS (port 443), making it:
+ * - Stateless and serverless-friendly
+ * - Not blocked by any firewall or IP allowlist
+ * - The officially recommended approach by TiDB Cloud for Vercel
  *
- * connectTimeout: 10000 is required because the default 1000ms is too short
- * for the TLS handshake latency to TiDB Cloud Serverless.
- *
- * NOTE: Do NOT import "dotenv/config" here. Next.js (and Vercel) handle
- * environment variable injection natively. dotenv is only needed for standalone
- * scripts like prisma/seed.ts that run outside of Next.js.
+ * NOTE: The DATABASE_URL format must use 'mysql://' (not 'mariadb://').
+ * Update the URL on Vercel env vars accordingly.
  */
-const adapter = new PrismaMariaDb({
-  host: dbUrl.hostname,
-  port: Number(dbUrl.port) || 4000,
-  user: decodeURIComponent(dbUrl.username),
-  password: decodeURIComponent(dbUrl.password),
-  database: dbUrl.pathname.replace(/^\//, ""),
-  ssl: {
-    // NOTE: rejectUnauthorized is false to work with TiDB Cloud from Vercel.
-    // The NODE_TLS_REJECT_UNAUTHORIZED=0 Vercel env var signals that strict
-    // cert verification must be bypassed. Setting rejectUnauthorized: true
-    // here overrides that and causes TLS handshake failures (disguised as
-    // pool timeouts). TiDB Cloud connections are still encrypted via TLS.
-    rejectUnauthorized: false,
-  },
-  // connectTimeout: per-socket TLS handshake deadline (ms)
-  // acquireTimeout: total time the pool waits for a usable connection (ms)
-  // Both must be generous for Vercel → TiDB Cloud cold-start latency.
-  connectTimeout: 20000,
-  acquireTimeout: 30000,
-  connectionLimit: 5, // Keep low for serverless — avoids connection exhaustion
-});
+const connection = connect({ url: databaseUrl });
+const adapter = new PrismaTiDBCloud(connection);
 
-let prisma: PrismaClient;
+const globalForPrisma = global as typeof globalThis & {
+  prisma?: PrismaClient;
+};
 
-if (process.env.NODE_ENV === "production") {
-  prisma = new PrismaClient({ adapter });
-} else {
-  // Prevent multiple instances during Next.js hot-reloads in development
-  const globalWithPrisma = global as typeof globalThis & {
-    prisma?: PrismaClient;
-  };
+export const prisma =
+  globalForPrisma.prisma ??
+  new PrismaClient({ adapter });
 
-  if (!globalWithPrisma.prisma) {
-    globalWithPrisma.prisma = new PrismaClient({ adapter });
-  }
-
-  prisma = globalWithPrisma.prisma;
+if (process.env.NODE_ENV !== "production") {
+  globalForPrisma.prisma = prisma;
 }
-
-export { prisma };
