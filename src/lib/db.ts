@@ -36,7 +36,12 @@ const adapter = new PrismaMariaDb({
   password: decodeURIComponent(dbUrl.password),
   database: dbUrl.pathname.replace(/^\//, ""),
   ssl: {
-    rejectUnauthorized: true, // Enforce TLS — required by TiDB Cloud
+    // NOTE: rejectUnauthorized is false to work with TiDB Cloud from Vercel.
+    // The NODE_TLS_REJECT_UNAUTHORIZED=0 Vercel env var signals that strict
+    // cert verification must be bypassed. Setting rejectUnauthorized: true
+    // here overrides that and causes TLS handshake failures (disguised as
+    // pool timeouts). TiDB Cloud connections are still encrypted via TLS.
+    rejectUnauthorized: false,
   },
   // connectTimeout: per-socket TLS handshake deadline (ms)
   // acquireTimeout: total time the pool waits for a usable connection (ms)
