@@ -1,4 +1,3 @@
-import { connect } from "@tidbcloud/serverless";
 import { PrismaTiDBCloud } from "@tidbcloud/prisma-adapter";
 import { PrismaClient } from "@prisma/client";
 
@@ -16,24 +15,26 @@ if (!databaseUrl) {
  * which are fundamentally incompatible with Vercel's Lambda-style serverless
  * functions — they cannot maintain open TCP sockets between invocations.
  *
- * @tidbcloud/serverless communicates over HTTPS (port 443), making it:
+ * PrismaTiDBCloud communicates over HTTPS (port 443), making it:
  * - Stateless and serverless-friendly
  * - Not blocked by any firewall or IP allowlist
  * - The officially recommended approach by TiDB Cloud for Vercel
  *
- * NOTE: The DATABASE_URL format must use 'mysql://' (not 'mariadb://').
- * Update the URL on Vercel env vars accordingly.
+ * PrismaTiDBCloud takes a Config object directly (not a Connection).
+ * Config shape: { url, username, password, host, database, ... }
+ * Passing { url } is sufficient — the driver parses credentials from it.
+ *
+ * NOTE: DATABASE_URL must use 'mysql://' (not 'mariadb://').
+ * Update the URL on Vercel Environment Variables accordingly.
  */
-const connection = connect({ url: databaseUrl });
-const adapter = new PrismaTiDBCloud(connection);
+const adapter = new PrismaTiDBCloud({ url: databaseUrl });
 
 const globalForPrisma = global as typeof globalThis & {
   prisma?: PrismaClient;
 };
 
 export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({ adapter });
+  globalForPrisma.prisma ?? new PrismaClient({ adapter });
 
 if (process.env.NODE_ENV !== "production") {
   globalForPrisma.prisma = prisma;
