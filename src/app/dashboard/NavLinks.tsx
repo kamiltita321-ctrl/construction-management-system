@@ -15,15 +15,18 @@ const NAV_ITEMS: NavLinkItem[] = [
   { name: "Projects", href: "/dashboard/projects", icon: "📁" },
   { name: "Tasks", href: "/dashboard/tasks", icon: "📋" },
   { name: "Inventory", href: "/dashboard/inventory", icon: "📦" },
-  { name: "Reports", href: "/dashboard/reports", icon: "📝" },
+  { name: "Admin", href: "/dashboard/admin", icon: "🔑" },
 ];
 
 export default function NavLinks({ role }: { role: string }) {
   const pathname = usePathname();
 
-  const filteredItems = role === "SITE_ENGINEER" 
-    ? NAV_ITEMS.filter(item => item.name !== "Inventory")
-    : NAV_ITEMS;
+  // Filter items: hide Inventory for SITE_ENGINEER, hide Admin for non-admins
+  const filteredItems = NAV_ITEMS.filter(item => {
+    if (item.name === "Inventory" && role === "SITE_ENGINEER") return false;
+    if (item.name === "Admin" && role !== "SYSTEM_ADMIN") return false;
+    return true;
+  });
 
   return (
     <nav className={styles.navSection}>

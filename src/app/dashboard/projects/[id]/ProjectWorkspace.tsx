@@ -981,7 +981,19 @@ export default function ProjectWorkspace({
         {activeTab === "reports" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
             {isSE ? (
-              <p style={{ color: "var(--text-muted)", fontSize: "13px" }}>Site Engineers do not have compilation or read access to high-level Weekly &amp; Monthly Reports.</p>
+              <div style={{ display: "flex", flexDirection: "column", gap: "16px", alignItems: "flex-start" }}>
+                <p style={{ color: "var(--text-muted)", fontSize: "13px" }}>Site Engineers do not have compilation or read access to high-level Weekly &amp; Monthly Reports.</p>
+                <button
+                  onClick={() => {
+                    setActiveTab("daily-logs");
+                    setDailySubTab("qc-log");
+                  }}
+                  className="btn btn-primary"
+                  style={{ backgroundColor: "var(--accent)", border: "none" }}
+                >
+                  📝 Log Daily Report
+                </button>
+              </div>
             ) : (
               <>
                 <div>
