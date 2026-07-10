@@ -25,7 +25,7 @@ async function getTaskAndCheckPermission(userId: string, role: Role, taskId: str
     role === Role.VP_OF_CONSTRUCTION;
 
   const isProjectPM = role === Role.PROJECT_MANAGER && task.project.managerId === userId;
-  const isAssignee = role === Role.SITE_ENGINEER && task.project.engineers.some((e: any) => e.id === userId);
+  const isAssignee = role === Role.OFFICE_ENGINEER && task.project.engineers.some((e: any) => e.id === userId);
 
   return {
     exists: true,

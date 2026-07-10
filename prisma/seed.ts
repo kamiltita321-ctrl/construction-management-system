@@ -106,7 +106,7 @@ async function main() {
       passwordHash: sePass,
       firstName: "Sarah",
       lastName: "Engineer",
-      role: "SITE_ENGINEER",
+      role: "OFFICE_ENGINEER",
       phone: "+15550600",
     },
   });

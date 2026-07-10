@@ -11,7 +11,7 @@ export default async function ReportsPage() {
 
   // 1. Fetch daily reports matching permissions
   let reports;
-  if (role === Role.SITE_ENGINEER) {
+  if (role === Role.OFFICE_ENGINEER) {
     // Site Engineers see reports they submitted, OR approved reports for their assigned projects
     reports = await prisma.dailyReport.findMany({
       where: {
@@ -58,7 +58,7 @@ export default async function ReportsPage() {
 
   // 2. Fetch projects details (with allocated materials) that user has access to
   let projects;
-  if (role === Role.SITE_ENGINEER) {
+  if (role === Role.OFFICE_ENGINEER) {
     projects = await prisma.project.findMany({
       where: { engineers: { some: { id: userId } } },
       select: {
@@ -103,7 +103,7 @@ export default async function ReportsPage() {
 
   // 3. Fetch summary reports
   let summaries: any[] = [];
-  if (role === Role.SITE_ENGINEER) {
+  if (role === Role.OFFICE_ENGINEER) {
     summaries = []; // Site Engineers do not have access to Weekly/Monthly Reports features
   } else if (role === Role.PROJECT_MANAGER) {
     summaries = await prisma.summaryReport.findMany({
@@ -196,7 +196,7 @@ export default async function ReportsPage() {
     <ReportsTabsLayout
       reportsDashboard={reportsDashboard}
       summaryDashboard={summaryDashboard}
-      isSiteEngineer={role === Role.SITE_ENGINEER}
+      isSiteEngineer={role === Role.OFFICE_ENGINEER}
     />
   );
 }

@@ -12,42 +12,32 @@ export async function GET() {
     const { role, userId } = auth.session;
     let changeOrders;
 
-    if (role === Role.SITE_ENGINEER) {
-      // Engineers only see change orders on projects they work on
+    if (role === Role.OFFICE_ENGINEER || role === Role.CONSTRUCTION_ENGINEER) {
       changeOrders = await prisma.changeOrder.findMany({
-        where: {
-          project: {
-            engineers: { some: { id: userId } }
-          }
-        },
+        where: { project: { engineers: { some: { id: userId } } } },
         include: {
-          project: { select: { name: true, code: true } },
+          project: { select: { name: true, code: true, budget: true } },
           requester: { select: { firstName: true, lastName: true } },
           approver: { select: { firstName: true, lastName: true } },
         },
         orderBy: { createdAt: "desc" },
       });
     } else if (role === Role.PROJECT_MANAGER) {
-      // PMs see change orders they requested or for projects they manage
       changeOrders = await prisma.changeOrder.findMany({
         where: {
-          OR: [
-            { requesterId: userId },
-            { project: { managerId: userId } },
-          ]
+          OR: [{ requesterId: userId }, { project: { managerId: userId } }],
         },
         include: {
-          project: { select: { name: true, code: true } },
+          project: { select: { name: true, code: true, budget: true } },
           requester: { select: { firstName: true, lastName: true } },
           approver: { select: { firstName: true, lastName: true } },
         },
         orderBy: { createdAt: "desc" },
       });
     } else {
-      // Leadership/Admin sees all change orders
       changeOrders = await prisma.changeOrder.findMany({
         include: {
-          project: { select: { name: true, code: true } },
+          project: { select: { name: true, code: true, budget: true } },
           requester: { select: { firstName: true, lastName: true } },
           approver: { select: { firstName: true, lastName: true } },
         },
@@ -62,7 +52,7 @@ export async function GET() {
   }
 }
 
-// POST /api/change-orders - PM/VP requests a change order
+// POST /api/change-orders - Create change order with 25% budget gate
 export async function POST(req: NextRequest) {
   try {
     const allowedRoles: Role[] = [
@@ -77,7 +67,7 @@ export async function POST(req: NextRequest) {
 
     const { userId } = auth.session;
     const body = await req.json();
-    const { title, description, estimatedCost, projectId } = body;
+    const { title, description, estimatedCost, projectId, requestLetterUrl } = body;
 
     if (!title || !description || estimatedCost === undefined || !projectId) {
       return NextResponse.json(
@@ -86,30 +76,63 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Verify project exists
-    const project = await prisma.project.findUnique({
-      where: { id: projectId }
-    });
-
+    const project = await prisma.project.findUnique({ where: { id: projectId } });
     if (!project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
     const { role } = auth.session;
-    // Project Managers can only create change orders for projects they manage
     if (role === Role.PROJECT_MANAGER && project.managerId !== userId) {
-      return NextResponse.json({ error: "Access denied. Project Managers can only request change orders for projects they manage." }, { status: 403 });
+      return NextResponse.json(
+        { error: "Access denied. Project Managers can only request change orders for their projects." },
+        { status: 403 }
+      );
+    }
+
+    // ── 25% BUDGET HARD GATE ──
+    const cost = parseFloat(estimatedCost) || 0;
+    if (project.budget > 0) {
+      // Sum all existing approved + pending COs
+      const existingCOs = await prisma.changeOrder.aggregate({
+        where: {
+          projectId,
+          status: { in: [OrderStatus.APPROVED, OrderStatus.PENDING_APPROVAL] },
+        },
+        _sum: { estimatedCost: true },
+      });
+      const existingTotal = existingCOs._sum.estimatedCost || 0;
+      const newTotal = existingTotal + cost;
+      const threshold = project.budget * 0.25;
+
+      if (newTotal > threshold) {
+        return NextResponse.json(
+          {
+            error: `Change Order denied. Total change amount ($${newTotal.toLocaleString()}) exceeds 25% of the baseline project budget ($${threshold.toLocaleString()}). Please seek executive authorization.`,
+            code: "BUDGET_GATE_EXCEEDED",
+            threshold,
+            existing: existingTotal,
+            requested: cost,
+            total: newTotal,
+          },
+          { status: 422 }
+        );
+      }
     }
 
     const changeOrder = await prisma.changeOrder.create({
       data: {
         title,
         description,
-        estimatedCost: parseFloat(estimatedCost) || 0.0,
+        estimatedCost: cost,
         status: OrderStatus.PENDING_APPROVAL,
         projectId,
         requesterId: userId,
-      }
+        requestLetterUrl: requestLetterUrl || null,
+      },
+      include: {
+        requester: { select: { firstName: true, lastName: true } },
+        approver: { select: { firstName: true, lastName: true } },
+      },
     });
 
     return NextResponse.json({ changeOrder }, { status: 201 });

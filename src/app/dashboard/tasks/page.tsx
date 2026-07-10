@@ -9,7 +9,7 @@ export default async function TasksPage() {
 
   // 1. Fetch Work Orders (Tasks) matching permissions
   let tasks;
-  if (role === Role.SITE_ENGINEER) {
+  if (role === Role.OFFICE_ENGINEER) {
     tasks = await prisma.task.findMany({
       where: {
         project: {
@@ -45,7 +45,7 @@ export default async function TasksPage() {
 
   // 2. Fetch Change Orders matching permissions
   let changeOrders;
-  if (role === Role.SITE_ENGINEER) {
+  if (role === Role.OFFICE_ENGINEER) {
     changeOrders = await prisma.changeOrder.findMany({
       where: {
         project: {
@@ -87,7 +87,7 @@ export default async function TasksPage() {
 
   // 3. Fetch active projects list for options
   let projects;
-  if (role === Role.SITE_ENGINEER) {
+  if (role === Role.OFFICE_ENGINEER) {
     projects = await prisma.project.findMany({
       where: { engineers: { some: { id: userId } } },
       select: { id: true, name: true, code: true },
@@ -105,7 +105,7 @@ export default async function TasksPage() {
 
   // 4. Fetch site engineers list for assignments
   const engineers = await prisma.user.findMany({
-    where: { role: Role.SITE_ENGINEER, isActive: true },
+    where: { role: Role.OFFICE_ENGINEER, isActive: true },
     select: { id: true, firstName: true, lastName: true, role: true },
   });
 

@@ -9,7 +9,7 @@ export default async function DashboardPage() {
 
   // 1. Query projects scoped by role
   let projectQuery: any;
-  if (role === Role.SITE_ENGINEER) {
+  if (role === Role.OFFICE_ENGINEER) {
     projectQuery = { engineers: { some: { id: userId } } };
   } else if (role === Role.PROJECT_MANAGER) {
     projectQuery = { managerId: userId };
@@ -41,7 +41,7 @@ export default async function DashboardPage() {
 
   // 3. Pending tasks count
   let taskQuery: any;
-  if (role === Role.SITE_ENGINEER) {
+  if (role === Role.OFFICE_ENGINEER) {
     taskQuery = { assigneeId: userId, status: { not: OrderStatus.COMPLETED } };
   } else if (role === Role.PROJECT_MANAGER) {
     taskQuery = { project: { managerId: userId }, status: { not: OrderStatus.COMPLETED } };
@@ -53,7 +53,7 @@ export default async function DashboardPage() {
 
   // 4. Pending change orders
   let coQuery: any;
-  if (role === Role.SITE_ENGINEER) {
+  if (role === Role.OFFICE_ENGINEER) {
     coQuery = { project: { engineers: { some: { id: userId } } }, status: OrderStatus.PENDING_APPROVAL };
   } else if (role === Role.PROJECT_MANAGER) {
     coQuery = { project: { managerId: userId }, status: OrderStatus.PENDING_APPROVAL };

@@ -21,9 +21,12 @@ const NAV_ITEMS: NavLinkItem[] = [
 export default function NavLinks({ role }: { role: string }) {
   const pathname = usePathname();
 
-  // Filter items: hide Inventory for SITE_ENGINEER, hide Admin for non-admins
-  const filteredItems = NAV_ITEMS.filter(item => {
-    if (item.name === "Inventory" && role === "SITE_ENGINEER") return false;
+  // Filter items based on role:
+  // - OFFICE_ENGINEER: hide Inventory (project-scoped only via workspace)
+  // - CONSTRUCTION_ENGINEER: hide Inventory global view
+  // - Admin tab: SYSTEM_ADMIN only
+  const filteredItems = NAV_ITEMS.filter((item) => {
+    if (item.name === "Inventory" && (role === "OFFICE_ENGINEER" || role === "CONSTRUCTION_ENGINEER")) return false;
     if (item.name === "Admin" && role !== "SYSTEM_ADMIN") return false;
     return true;
   });
@@ -31,7 +34,6 @@ export default function NavLinks({ role }: { role: string }) {
   return (
     <nav className={styles.navSection}>
       {filteredItems.map((item) => {
-        // Match exact or parent directory paths
         const isActive =
           pathname === item.href ||
           (item.href !== "/dashboard" && pathname.startsWith(item.href));

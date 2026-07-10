@@ -10,9 +10,10 @@ export async function POST(req: NextRequest) {
     if (!auth.authorized) return auth.response;
 
     const { role } = auth.session;
-    if (role === "SITE_ENGINEER") {
+    // Office Engineers are read-only on documents (Level 3 shared only)
+    if (role === "OFFICE_ENGINEER") {
       return NextResponse.json(
-        { error: "Access denied. Site Engineers are restricted to read-only access for documents." },
+        { error: "Access denied. Office Engineers are restricted to read-only access for documents." },
         { status: 403 }
       );
     }
@@ -20,8 +21,11 @@ export async function POST(req: NextRequest) {
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
     const title = formData.get("title") as string | null;
-    const fileType = formData.get("fileType") as string | null; // "DRAWING", "CONTRACT", "REPORT", "IMAGE", "PDF"
+    const fileType = formData.get("fileType") as string | null;
     const projectId = formData.get("projectId") as string | null;
+    const confidentialityLevel = parseInt(formData.get("confidentialityLevel") as string || "3");
+    const referenceNumber = formData.get("referenceNumber") as string | null;
+    const documentDate = formData.get("documentDate") as string | null;
 
     if (!file || !title || !fileType || !projectId) {
       return NextResponse.json(
@@ -61,7 +65,6 @@ export async function POST(req: NextRequest) {
     // Write file to filesystem
     await writeFile(absoluteFilePath, buffer);
 
-    // Log the file details in the MySQL database
     const document = await prisma.document.create({
       data: {
         title,
@@ -70,6 +73,9 @@ export async function POST(req: NextRequest) {
         fileSize: file.size,
         projectId,
         uploadedBy: `${auth.session.firstName} ${auth.session.lastName}`,
+        confidentialityLevel: confidentialityLevel || 3,
+        referenceNumber: referenceNumber || null,
+        documentDate: documentDate ? new Date(documentDate) : null,
       },
     });
 

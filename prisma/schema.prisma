@@ -13,7 +13,8 @@ enum Role {
   DEPUTY_GENERAL_MANAGER
   VP_OF_CONSTRUCTION
   PROJECT_MANAGER
-  SITE_ENGINEER
+  CONSTRUCTION_ENGINEER
+  OFFICE_ENGINEER
 }
 
 enum ProjectStatus {
@@ -46,30 +47,34 @@ model User {
   updatedAt    DateTime @updatedAt
 
   // Relationships
-  managedProjects      Project[]          @relation("ProjectManager")
-  siteProjects         Project[]          @relation("SiteEngineers")
-  assignedTasks        Task[]             @relation("TaskAssignee")
-  createdTasks         Task[]             @relation("TaskCreator")
-  reportsSubmitted     DailyReport[]      @relation("ReportSubmitter")
-  changeOrdersCreated  ChangeOrder[]      @relation("ChangeOrderRequester")
-  changeOrdersApproved ChangeOrder[]      @relation("ChangeOrderApprover")
-  summaryReports       SummaryReport[]    @relation("ReportCompiler")
-  projectNotes         ProjectNote[]
-  visitorLogsLogged    VisitorLog[]       @relation("VisitorLogger")
-  inspectionsLed       InspectionRecord[] @relation("InspectionConductor")
-  visitorLogs          VisitorLog[]
+  managedProjects       Project[]           @relation("ProjectManager")
+  siteProjects          Project[]           @relation("SiteEngineers")
+  assignedTasks         Task[]              @relation("TaskAssignee")
+  createdTasks          Task[]              @relation("TaskCreator")
+  reportsSubmitted      DailyReport[]       @relation("ReportSubmitter")
+  changeOrdersCreated   ChangeOrder[]       @relation("ChangeOrderRequester")
+  changeOrdersApproved  ChangeOrder[]       @relation("ChangeOrderApprover")
+  summaryReports        SummaryReport[]     @relation("ReportCompiler")
+  projectNotes          ProjectNote[]
+  visitorLogsLogged     VisitorLog[]        @relation("VisitorLogger")
+  inspectionsLed        InspectionRecord[]  @relation("InspectionConductor")
+  visitorLogs           VisitorLog[]
+  withdrawalVouchersReq WithdrawalVoucher[] @relation("VoucherRequester")
+  withdrawalVouchersApp WithdrawalVoucher[] @relation("VoucherApprover")
 }
 
 model Project {
   id          String        @id @default(uuid())
   name        String
-  code        String        @unique // Short project code (e.g., PRJ-2026-001)
+  code        String        @unique
   description String?       @db.Text
   location    String
   startDate   DateTime
   endDate     DateTime?
   status      ProjectStatus @default(PLANNING)
   budget      Float         @default(0.0)
+  category    String        @default("BUILDING") // "BUILDING", "HIGHWAY", "INFRASTRUCTURE"
+  lagReason   String?       @db.Text
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
@@ -79,16 +84,18 @@ model Project {
   engineers User[] @relation("SiteEngineers")
 
   // Sub-modules
-  milestones        Milestone[]
-  tasks             Task[]
-  changeOrders      ChangeOrder[]
-  materials         MaterialAllocation[]
-  documents         Document[]
-  dailyReports      DailyReport[]
-  summaryReports    SummaryReport[]
-  projectNotes      ProjectNote[]
-  visitorLogs       VisitorLog[]
-  inspectionRecords InspectionRecord[]
+  milestones         Milestone[]
+  tasks              Task[]
+  changeOrders       ChangeOrder[]
+  materials          MaterialAllocation[]
+  documents          Document[]
+  dailyReports       DailyReport[]
+  summaryReports     SummaryReport[]
+  projectNotes       ProjectNote[]
+  visitorLogs        VisitorLog[]
+  inspectionRecords  InspectionRecord[]
+  withdrawalVouchers WithdrawalVoucher[]
+  masterSchedule     MasterSchedule?
 }
 
 model Milestone {
@@ -104,13 +111,15 @@ model Milestone {
 }
 
 model Task {
-  id          String      @id @default(uuid())
-  title       String
-  description String?     @db.Text
-  dueDate     DateTime
-  status      OrderStatus @default(DRAFT)
-  type        String      @default("WORK_ORDER") // "WORK_ORDER" or "CHANGE_ORDER_TASK"
-  progress    Int         @default(0) // 0-100 percentage
+  id            String      @id @default(uuid())
+  title         String
+  description   String?     @db.Text
+  dueDate       DateTime
+  status        OrderStatus @default(DRAFT)
+  type          String      @default("WORK_ORDER") // "WORK_ORDER" or "CHANGE_ORDER_TASK"
+  progress      Int         @default(0) // 0-100 percentage
+  workflowStage String      @default("INITIATED")
+  // Pipeline stages: INITIATED | SE_EXECUTION | CE_QC_REVIEW | PM_APPROVAL | CONSULTANT_REVIEW | COMPLETED
 
   projectId String
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -126,12 +135,15 @@ model Task {
 }
 
 model ChangeOrder {
-  id              String      @id @default(uuid())
-  title           String
-  description     String      @db.Text
-  estimatedCost   Float
-  status          OrderStatus @default(PENDING_APPROVAL)
-  rejectionReason String?     @db.Text
+  id               String      @id @default(uuid())
+  title            String
+  description      String      @db.Text
+  estimatedCost    Float
+  status           OrderStatus @default(PENDING_APPROVAL)
+  rejectionReason  String?     @db.Text
+  requestLetterUrl String? // Mandatory consultant letter file attachment
+  workflowStage    String      @default("INITIATED")
+  // Pipeline stages: INITIATED | CE_EXECUTION | CE_QC | PM_APPROVAL | CONSULTANT_REVIEW | COMPLETED
 
   projectId String
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -154,6 +166,7 @@ model Material {
   minStock    Float                @default(0.0) // Reorder threshold
   allocations MaterialAllocation[]
   logs        MaterialLog[]
+  withdrawals WithdrawalVoucher[]
 }
 
 model MaterialAllocation {
@@ -178,24 +191,48 @@ model MaterialLog {
   createdAt   DateTime @default(now())
 }
 
+model WithdrawalVoucher {
+  id            String   @id @default(uuid())
+  projectId     String
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  materialId    String
+  material      Material @relation(fields: [materialId], references: [id])
+  quantity      Float
+  purpose       String?  @db.Text
+  status        String   @default("PENDING_CE") // "PENDING_CE" | "PENDING_PM" | "APPROVED" | "REJECTED"
+  ceNotes       String?  @db.Text
+  pmNotes       String?  @db.Text
+  requestedById String
+  requestedBy   User     @relation("VoucherRequester", fields: [requestedById], references: [id])
+  approverId    String?
+  approver      User?    @relation("VoucherApprover", fields: [approverId], references: [id])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
 model Document {
-  id         String   @id @default(uuid())
-  title      String
-  fileUrl    String
-  fileType   String // "DRAWING", "CONTRACT", "REPORT", "IMAGE", "PDF"
-  fileSize   Int
-  projectId  String
-  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  uploadedBy String // User display name or ID
-  createdAt  DateTime @default(now())
+  id                   String    @id @default(uuid())
+  title                String
+  fileUrl              String
+  fileType             String // "DRAWING", "CONTRACT", "REPORT", "IMAGE", "PDF"
+  fileSize             Int
+  confidentialityLevel Int       @default(3) // 1=Head Office, 2=PM+, 3=All (shared)
+  referenceNumber      String?
+  documentDate         DateTime?
+  projectId            String
+  project              Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  uploadedBy           String // User display name or ID
+  createdAt            DateTime  @default(now())
 }
 
 model DailyReport {
-  id            String   @id @default(uuid())
-  reportDate    DateTime // The operational date this report represents
-  workCompleted String   @db.Text
-  issuesFaced   String?  @db.Text
+  id          String   @id @default(uuid())
+  reportDate  DateTime // The operational date this report represents
+  workCompleted String @db.Text
+  issuesFaced   String? @db.Text
   weather       String?
+  dailyCost     Float? // Encoded by Office Engineer after the fact
+  dailyProfit   Float? // Encoded by Office Engineer after the fact
 
   projectId String
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -338,13 +375,29 @@ model InspectionRecord {
   inspectorName  String
   inspectionDate DateTime
   area           String
-  outcome        String // "PASSED", "FAILED", "CONDITIONAL", "PENDING"
+  outcome        String    @default("PENDING") // "PASSED", "FAILED", "CONDITIONAL", "PENDING"
   followUpDate   DateTime?
   findings       String?   @db.Text
+  workflowStage  String    @default("REQUESTED")
+  // Pipeline: REQUESTED | PM_APPROVED | UNDER_INSPECTION | RESULT_ENCODING | COMPLETED
   projectId      String
   project        Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   conductedById  String
   conductedBy    User      @relation("InspectionConductor", fields: [conductedById], references: [id])
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
+}
+
+model MasterSchedule {
+  id          String   @id @default(uuid())
+  projectId   String   @unique
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  fileName    String
+  fileUrl     String   // path under /uploads/schedules/
+  parsedWbs      Json // Work Breakdown Structure data
+  parsedResources Json // Resource Schedule data
+  parsedBudget    Json // Budget Schedule data
+  uploadedBy  String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }

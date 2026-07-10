@@ -63,10 +63,11 @@ export default async function ProjectDetailPage({
     role === Role.VP_OF_CONSTRUCTION;
 
   const isAssignedPM = role === Role.PROJECT_MANAGER && project.managerId === userId;
-  const isAssignedSE =
-    role === Role.SITE_ENGINEER && project.engineers.some((e) => e.id === userId);
+  const isAssignedField =
+    (role === Role.OFFICE_ENGINEER || role === Role.CONSTRUCTION_ENGINEER) &&
+    project.engineers.some((e) => e.id === userId);
 
-  if (!isExecutive && !isAssignedPM && !isAssignedSE) {
+  if (!isExecutive && !isAssignedPM && !isAssignedField) {
     redirect("/forbidden");
   }
 
@@ -102,6 +103,8 @@ export default async function ProjectDetailPage({
     endDate: project.endDate ? project.endDate.toISOString().split("T")[0] : null,
     status: project.status,
     budget: project.budget,
+    category: (project as any).category || "BUILDING",
+    lagReason: (project as any).lagReason || null,
     manager: project.manager,
     engineers: project.engineers,
     milestones: project.milestones.map((m) => ({

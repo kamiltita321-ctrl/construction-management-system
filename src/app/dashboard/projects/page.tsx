@@ -10,7 +10,7 @@ export default async function ProjectsPage() {
 
   // 1. Fetch projects based on user permissions
   let projects;
-  if (role === Role.SITE_ENGINEER) {
+  if (role === Role.OFFICE_ENGINEER) {
     projects = await prisma.project.findMany({
       where: {
         engineers: {

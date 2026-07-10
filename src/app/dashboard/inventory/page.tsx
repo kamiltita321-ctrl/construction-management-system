@@ -28,7 +28,7 @@ export default async function InventoryPage() {
 
   // Fetch list of project IDs user has access to
   let projectIdsUserHasAccessTo: string[] = [];
-  if (role === Role.SITE_ENGINEER) {
+  if (role === Role.OFFICE_ENGINEER) {
     const userProjects = await prisma.project.findMany({
       where: { engineers: { some: { id: userId } } },
       select: { id: true }

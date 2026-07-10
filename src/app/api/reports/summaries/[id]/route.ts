@@ -12,7 +12,7 @@ export async function GET(
     const auth = await verifyApiAuth();
     if (!auth.authorized) return auth.response;
 
-    if (auth.session.role === Role.SITE_ENGINEER) {
+    if (auth.session.role === Role.OFFICE_ENGINEER) {
       return NextResponse.json({ error: "Access denied. Site Engineers do not have access to Weekly/Monthly Reports." }, { status: 403 });
     }
 

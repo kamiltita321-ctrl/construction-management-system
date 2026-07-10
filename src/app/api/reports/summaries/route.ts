@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
     if (!auth.authorized) return auth.response;
 
     const { role, userId } = auth.session;
-    if (role === Role.SITE_ENGINEER) {
+    if (role === Role.OFFICE_ENGINEER) {
       return NextResponse.json({ error: "Access denied. Site Engineers do not have access to Weekly/Monthly Reports features." }, { status: 403 });
     }
     const url = new URL(req.url);
@@ -73,7 +73,7 @@ export async function GET(req: NextRequest) {
 
     // List mode
     let summaries;
-    if (role === Role.SITE_ENGINEER) {
+    if (role === Role.OFFICE_ENGINEER) {
       summaries = await prisma.summaryReport.findMany({
         where: {
           project: { engineers: { some: { id: userId } } },
@@ -125,7 +125,7 @@ export async function POST(req: NextRequest) {
 
     const { role, userId } = auth.session;
     // Only PMs, Admins, GMs, VPs can compile summaries
-    if (role === Role.SITE_ENGINEER) {
+    if (role === Role.OFFICE_ENGINEER) {
       return NextResponse.json({ error: "Access denied to compile reports" }, { status: 403 });
     }
 

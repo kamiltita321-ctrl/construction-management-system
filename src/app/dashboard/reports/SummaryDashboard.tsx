@@ -138,7 +138,7 @@ export default function SummaryDashboard({
             Review weekly or monthly progress reviews compiled from approved site logs, complete with PM commentary notes.
           </p>
         </div>
-        {currentUser.role !== "SITE_ENGINEER" && (
+        {currentUser.role !== "OFFICE_ENGINEER" && (
           <button
             onClick={() => setIsCompileOpen(true)}
             className="btn btn-primary"

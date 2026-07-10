@@ -41,7 +41,7 @@ const ROLE_CONFIG: Record<string, { label: string; color: string; gradient: stri
   DEPUTY_GENERAL_MANAGER:{ label: "Deputy General Manager",color: "#a855f7", gradient: "linear-gradient(135deg, #a855f7, #7c3aed)" },
   VP_OF_CONSTRUCTION:    { label: "VP of Construction",    color: "#3b82f6", gradient: "linear-gradient(135deg, #3b82f6, #1d4ed8)" },
   PROJECT_MANAGER:       { label: "Project Manager",       color: "#f59e0b", gradient: "linear-gradient(135deg, #f59e0b, #d97706)" },
-  SITE_ENGINEER:         { label: "Site Engineer",         color: "#10b981", gradient: "linear-gradient(135deg, #10b981, #059669)" },
+  OFFICE_ENGINEER:         { label: "Site Engineer",         color: "#10b981", gradient: "linear-gradient(135deg, #10b981, #059669)" },
 };
 
 // SVG Donut/Progress chart component
@@ -194,10 +194,10 @@ function getActivityIcon(description: string) {
 }
 
 export default function OverviewDashboard({ stats, charts, currentUser }: OverviewDashboardProps) {
-  const roleConfig = ROLE_CONFIG[currentUser.role] ?? ROLE_CONFIG.SITE_ENGINEER;
+  const roleConfig = ROLE_CONFIG[currentUser.role] ?? ROLE_CONFIG.OFFICE_ENGINEER;
   const isExecutive = ["SYSTEM_ADMIN", "GENERAL_MANAGER", "DEPUTY_GENERAL_MANAGER", "VP_OF_CONSTRUCTION"].includes(currentUser.role);
   const isPM = currentUser.role === "PROJECT_MANAGER";
-  const isSE = currentUser.role === "SITE_ENGINEER";
+  const isSE = currentUser.role === "OFFICE_ENGINEER";
 
   const maxBudget = Math.max(...charts.projectsData.map(p => p.budget), 1);
   const totalProjectBudget = charts.projectsData.reduce((acc, p) => acc + p.budget, 0);

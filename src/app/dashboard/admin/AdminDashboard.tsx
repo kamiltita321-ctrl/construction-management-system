@@ -24,7 +24,7 @@ export default function AdminDashboard({ currentUserRole }: { currentUserRole: s
   const [password, setPassword] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
-  const [role, setRole] = useState("SITE_ENGINEER");
+  const [role, setRole] = useState("OFFICE_ENGINEER");
   const [phone, setPhone] = useState("");
   const [error, setError] = useState("");
 
@@ -73,7 +73,7 @@ export default function AdminDashboard({ currentUserRole }: { currentUserRole: s
         setPassword("");
         setFirstName("");
         setLastName("");
-        setRole("SITE_ENGINEER");
+        setRole("OFFICE_ENGINEER");
         setPhone("");
       } else {
         setError(data.error || "Failed to create user.");
@@ -205,7 +205,8 @@ export default function AdminDashboard({ currentUserRole }: { currentUserRole: s
                     <option value="DEPUTY_GENERAL_MANAGER">Deputy General Manager</option>
                     <option value="VP_OF_CONSTRUCTION">VP of Construction</option>
                     <option value="PROJECT_MANAGER">Project Manager</option>
-                    <option value="SITE_ENGINEER">Site Engineer</option>
+                    <option value="CONSTRUCTION_ENGINEER">Construction Engineer</option>
+                    <option value="OFFICE_ENGINEER">Office Engineer</option>
                     <option value="SYSTEM_ADMIN">System Admin</option>
                   </select>
                 </div>

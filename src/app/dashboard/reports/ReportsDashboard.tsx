@@ -557,7 +557,7 @@ export default function ReportsDashboard({
             Submit and review daily logs, equipment & manpower tables, weather conditions, and material allocations.
           </p>
         </div>
-        {currentUser.role === "SITE_ENGINEER" && (
+        {currentUser.role === "OFFICE_ENGINEER" && (
           <button
             onClick={() => setIsSubmitOpen(true)}
             className="btn btn-primary"

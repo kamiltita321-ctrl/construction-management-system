@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 import { verifyApiAuth } from "@/lib/auth-server";
 import { Role } from "@prisma/client";
 
-// GET /api/projects/[id]/visitors - Fetch visitors logged for a project
+// GET /api/projects/[id]/visitors
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -11,7 +11,6 @@ export async function GET(
   try {
     const auth = await verifyApiAuth();
     if (!auth.authorized) return auth.response;
-
     const { id } = await params;
 
     const visitors = await prisma.visitorLog.findMany({
@@ -30,7 +29,7 @@ export async function GET(
   }
 }
 
-// POST /api/projects/[id]/visitors - Log a new visitor (PM write, others read)
+// POST /api/projects/[id]/visitors - Head Office only (GM, DGM, VP, Admin)
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -42,17 +41,16 @@ export async function POST(
     const { id } = await params;
     const { userId, role } = auth.session;
 
-    // PM is allowed to log visitors
-    const isPM = role === Role.PROJECT_MANAGER;
-    const isExec =
+    // Visitors tab: Head Office roles exclusively (spec §1)
+    const isHeadOffice =
       role === Role.SYSTEM_ADMIN ||
       role === Role.GENERAL_MANAGER ||
       role === Role.DEPUTY_GENERAL_MANAGER ||
       role === Role.VP_OF_CONSTRUCTION;
 
-    if (!isPM && !isExec) {
+    if (!isHeadOffice) {
       return NextResponse.json(
-        { error: "Access denied. Only Project Managers can log new visitors." },
+        { error: "Access denied. Only Head Office roles (GM, DGM, VP) can log visitors." },
         { status: 403 }
       );
     }

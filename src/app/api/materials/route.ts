@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
     // Restrict allocations visible to user based on role and project assignments
     const filteredMaterials = materials.map((m) => {
       const filteredAllocations = m.allocations.filter((a) => {
-        if (role === Role.SITE_ENGINEER) {
+        if (role === Role.OFFICE_ENGINEER) {
           return a.project && a.project.engineers.some((e) => e.id === userId);
         } else if (role === Role.PROJECT_MANAGER) {
           return a.project && a.project.managerId === userId;

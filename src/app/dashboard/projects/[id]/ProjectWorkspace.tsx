@@ -6,6 +6,7 @@ import MilestonesList from "./MilestonesList";
 import ProjectDocuments from "./ProjectDocuments";
 import ReportsDashboard from "../../reports/ReportsDashboard";
 import SummaryDashboard from "../../reports/SummaryDashboard";
+import ScheduleUploader from "./ScheduleUploader";
 
 interface User {
   id: string;
@@ -25,6 +26,8 @@ interface Project {
   endDate: string | null;
   status: string;
   budget: number;
+  category: string;
+  lagReason: string | null;
   manager: User;
   engineers: User[];
   materials: Array<{
@@ -161,31 +164,23 @@ export default function ProjectWorkspace({
     }
   }, [activeTab, dailySubTab, project.id]);
 
-  const isSE = currentUser.role === "SITE_ENGINEER";
+  const isOE = currentUser.role === "OFFICE_ENGINEER";
+  const isCE = currentUser.role === "CONSTRUCTION_ENGINEER";
   const isPM = currentUser.role === "PROJECT_MANAGER";
-  
-  // Tasks (work orders) can be modified by: Admin, GM, DGM, VP, or Project Manager
-  const canModifyTasks =
-    currentUser.role === "SYSTEM_ADMIN" ||
-    currentUser.role === "GENERAL_MANAGER" ||
-    currentUser.role === "DEPUTY_GENERAL_MANAGER" ||
-    currentUser.role === "VP_OF_CONSTRUCTION" ||
-    isPM;
-
-  // Change orders can be approved by: Admin, GM, DGM, VP
-  const canApproveCO =
+  const isHeadOffice =
     currentUser.role === "SYSTEM_ADMIN" ||
     currentUser.role === "GENERAL_MANAGER" ||
     currentUser.role === "DEPUTY_GENERAL_MANAGER" ||
     currentUser.role === "VP_OF_CONSTRUCTION";
 
-  // Change orders can be requested by: Admin, GM, DGM, VP, or PM
-  const canRequestCO =
-    currentUser.role === "SYSTEM_ADMIN" ||
-    currentUser.role === "GENERAL_MANAGER" ||
-    currentUser.role === "DEPUTY_GENERAL_MANAGER" ||
-    currentUser.role === "VP_OF_CONSTRUCTION" ||
-    isPM;
+  // Work Orders: CE initiates/QCs, PM approves, Head Office oversees
+  const canModifyTasks = isHeadOffice || isPM || isCE;
+
+  // Change orders approved by Head Office only
+  const canApproveCO = isHeadOffice;
+
+  // Change orders requested by Head Office or PM
+  const canRequestCO = isHeadOffice || isPM;
 
   // Visitors & Inspections states
   interface Visitor {
@@ -541,13 +536,13 @@ export default function ProjectWorkspace({
       {/* Tab Menu Header */}
       <div style={{ display: "flex", borderBottom: "1px solid var(--border)", gap: "8px", overflowX: "auto", paddingBottom: "4px" }}>
         {[
-          { id: "dashboard",   label: "📊 Overview" },
-          ...(isSE ? [] : [{ id: "crew",        label: "👷 Team" }]),
-          { id: "daily-logs",  label: "📋 Daily Logs" },
-          ...(isSE ? [] : [{ id: "inventory",   label: "📦 Inventory" }]),
-          { id: "reports",     label: "📝 Reports" },
-          { id: "documents",   label: "📁 Documents" },
-          { id: "schedule",    label: "📅 Schedule" },
+          { id: "dashboard",  label: "📊 Overview" },
+          ...(isHeadOffice ? [{ id: "crew", label: "👷 Team" }] : []),
+          { id: "daily-logs", label: "📋 Daily Logs" },
+          ...(!isOE ? [{ id: "inventory", label: "📦 Inventory" }] : []),
+          { id: "reports",    label: "📝 Reports" },
+          { id: "documents",  label: "📁 Documents" },
+          { id: "schedule",   label: "📅 Schedule" },
         ].map((tab) => (
           <button
             key={tab.id}
@@ -573,47 +568,111 @@ export default function ProjectWorkspace({
       <div className="animate-fade-in" style={{ minHeight: "60vh" }}>
 
         {/* OVERVIEW */}
-        {activeTab === "dashboard" && (
-          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "24px", alignItems: "start" }}>
+        {activeTab === "dashboard" && (() => {
+          const approvedCOs = changeOrders.filter(co => co.status === "APPROVED");
+          const revisedBudget = project.budget + approvedCOs.reduce((s, co) => s + co.estimatedCost, 0);
+          const physicalProgress = tasks.length > 0 ? Math.round(tasks.reduce((s, t) => s + t.progress, 0) / tasks.length) : 0;
+          const today = new Date();
+          const endDate = project.endDate ? new Date(project.endDate) : null;
+          const lagDays = endDate ? Math.round((today.getTime() - endDate.getTime()) / (1000 * 60 * 60 * 24)) : null;
+          const isOverdue = lagDays !== null && lagDays > 0;
+          return (
             <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-              <section className="glass-panel" style={{ padding: "24px" }}>
-                <h4 style={{ fontSize: "16px", fontWeight: 700, marginBottom: "16px" }}>Project Specifications</h4>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
-                  <div><span style={{ display: "block", fontSize: "11px", color: "var(--text-muted)", textTransform: "uppercase" }}>Manager</span><span style={{ fontSize: "14px", fontWeight: 600 }}>{project.manager.firstName} {project.manager.lastName}</span></div>
-                  <div><span style={{ display: "block", fontSize: "11px", color: "var(--text-muted)", textTransform: "uppercase" }}>Budget</span><span style={{ fontSize: "14px", fontWeight: 600 }}>{new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(project.budget)}</span></div>
-                  <div><span style={{ display: "block", fontSize: "11px", color: "var(--text-muted)", textTransform: "uppercase" }}>Location</span><span style={{ fontSize: "14px", fontWeight: 600 }}>{project.location}</span></div>
-                  <div><span style={{ display: "block", fontSize: "11px", color: "var(--text-muted)", textTransform: "uppercase" }}>Status</span><span style={{ fontSize: "14px", fontWeight: 600 }}>{project.status.replace(/_/g, " ")}</span></div>
-                  <div><span style={{ display: "block", fontSize: "11px", color: "var(--text-muted)", textTransform: "uppercase" }}>Start Date</span><span style={{ fontSize: "14px", fontWeight: 600 }}>{project.startDate}</span></div>
-                  <div><span style={{ display: "block", fontSize: "11px", color: "var(--text-muted)", textTransform: "uppercase" }}>End Date</span><span style={{ fontSize: "14px", fontWeight: 600 }}>{project.endDate ?? "TBD"}</span></div>
-                </div>
-              </section>
-              {project.description && (
-                <section className="glass-panel" style={{ padding: "24px" }}>
-                  <h4 style={{ fontSize: "14px", fontWeight: 700, marginBottom: "10px" }}>Description</h4>
-                  <p style={{ fontSize: "13px", color: "var(--text-secondary)", lineHeight: "1.6" }}>{project.description}</p>
-                </section>
-              )}
-            </div>
-            <section className="glass-panel" style={{ padding: "24px" }}>
-              <h4 style={{ fontSize: "14px", fontWeight: 700, marginBottom: "16px" }}>Project Team</h4>
-              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px", background: "var(--bg-base)", borderRadius: "var(--radius-sm)" }}>
-                  <div style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--accent)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "13px" }}>{project.manager.firstName[0]}</div>
-                  <div><div style={{ fontSize: "13px", fontWeight: 600 }}>{project.manager.firstName} {project.manager.lastName}</div><div style={{ fontSize: "11px", color: "var(--text-muted)" }}>Project Manager</div></div>
-                </div>
-                {project.engineers.map(e => (
-                  <div key={e.id} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px", background: "var(--bg-base)", borderRadius: "var(--radius-sm)" }}>
-                    <div style={{ width: 32, height: 32, borderRadius: "50%", background: "rgba(99,102,241,0.3)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "13px" }}>{e.firstName[0]}</div>
-                    <div><div style={{ fontSize: "13px", fontWeight: 600 }}>{e.firstName} {e.lastName}</div><div style={{ fontSize: "11px", color: "var(--text-muted)" }}>{e.role.replace(/_/g, " ")}</div></div>
-                  </div>
-                ))}
+              {/* Category badge */}
+              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <span style={{ padding: "4px 14px", borderRadius: "var(--radius-full)", fontSize: "11px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "1px", backgroundColor: project.category === "HIGHWAY" ? "rgba(251,146,60,0.15)" : project.category === "INFRASTRUCTURE" ? "rgba(99,102,241,0.15)" : "rgba(34,197,94,0.15)", color: project.category === "HIGHWAY" ? "#fb923c" : project.category === "INFRASTRUCTURE" ? "var(--accent)" : "var(--success)" }}>
+                  {project.category === "HIGHWAY" ? "🛣️ Highway" : project.category === "INFRASTRUCTURE" ? "🏗️ Infrastructure" : "🏢 Building"}
+                </span>
+                <span style={{ fontSize: "13px", color: "var(--text-secondary)" }}>Project Classification</span>
               </div>
-            </section>
-          </div>
-        )}
 
-        {/* TEAM */}
-        {!isSE && activeTab === "crew" && (
+              <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "24px", alignItems: "start" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+                  {/* Specs */}
+                  <section className="glass-panel" style={{ padding: "24px" }}>
+                    <h4 style={{ fontSize: "16px", fontWeight: 700, marginBottom: "16px" }}>Project Specifications</h4>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
+                      <div><span style={{ display: "block", fontSize: "11px", color: "var(--text-muted)", textTransform: "uppercase" }}>Manager</span><span style={{ fontSize: "14px", fontWeight: 600 }}>{project.manager.firstName} {project.manager.lastName}</span></div>
+                      <div><span style={{ display: "block", fontSize: "11px", color: "var(--text-muted)", textTransform: "uppercase" }}>Baseline Budget</span><span style={{ fontSize: "14px", fontWeight: 600 }}>{formatCurrency(project.budget)}</span></div>
+                      <div><span style={{ display: "block", fontSize: "11px", color: "var(--text-muted)", textTransform: "uppercase" }}>Location</span><span style={{ fontSize: "14px", fontWeight: 600 }}>{project.location}</span></div>
+                      <div><span style={{ display: "block", fontSize: "11px", color: "var(--text-muted)", textTransform: "uppercase" }}>Status</span><span style={{ fontSize: "14px", fontWeight: 600 }}>{project.status.replace(/_/g, " ")}</span></div>
+                      <div><span style={{ display: "block", fontSize: "11px", color: "var(--text-muted)", textTransform: "uppercase" }}>Start Date</span><span style={{ fontSize: "14px", fontWeight: 600 }}>{project.startDate}</span></div>
+                      <div><span style={{ display: "block", fontSize: "11px", color: "var(--text-muted)", textTransform: "uppercase" }}>End Date</span><span style={{ fontSize: "14px", fontWeight: 600 }}>{project.endDate ?? "TBD"}</span></div>
+                    </div>
+                  </section>
+
+                  {/* Progress Matrix */}
+                  <section className="glass-panel" style={{ padding: "24px" }}>
+                    <h4 style={{ fontSize: "14px", fontWeight: 700, marginBottom: "16px" }}>📈 Executive Progress Matrix</h4>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                      <div style={{ padding: "16px", background: "var(--bg-base)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" }}>
+                        <div style={{ fontSize: "11px", color: "var(--text-muted)", textTransform: "uppercase", marginBottom: "8px" }}>Budget Comparison</div>
+                        <div style={{ fontSize: "12px", display: "flex", justifyContent: "space-between", marginBottom: "4px" }}><span style={{ color: "var(--text-secondary)" }}>Baseline:</span><span style={{ fontWeight: 700 }}>{formatCurrency(project.budget)}</span></div>
+                        <div style={{ fontSize: "12px", display: "flex", justifyContent: "space-between", marginBottom: "4px" }}><span style={{ color: "var(--text-secondary)" }}>Revised (w/ COs):</span><span style={{ fontWeight: 700, color: revisedBudget > project.budget ? "var(--warning)" : "var(--success)" }}>{formatCurrency(revisedBudget)}</span></div>
+                        <div style={{ fontSize: "11px", borderTop: "1px solid var(--border)", paddingTop: "4px", marginTop: "4px", display: "flex", justifyContent: "space-between" }}><span style={{ color: "var(--text-muted)" }}>CO Additions:</span><span style={{ color: "var(--accent)" }}>+{formatCurrency(revisedBudget - project.budget)}</span></div>
+                      </div>
+                      <div style={{ padding: "16px", background: "var(--bg-base)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" }}>
+                        <div style={{ fontSize: "11px", color: "var(--text-muted)", textTransform: "uppercase", marginBottom: "8px" }}>Physical Progress</div>
+                        <div style={{ fontSize: "28px", fontWeight: 800, color: physicalProgress >= 80 ? "var(--success)" : physicalProgress >= 40 ? "var(--accent)" : "var(--warning)" }}>{physicalProgress}%</div>
+                        <div style={{ height: "6px", backgroundColor: "var(--border)", borderRadius: "var(--radius-full)", overflow: "hidden", marginTop: "8px" }}><div style={{ height: "100%", width: `${physicalProgress}%`, backgroundColor: physicalProgress >= 80 ? "var(--success)" : physicalProgress >= 40 ? "var(--accent)" : "var(--warning)", transition: "width 0.4s ease" }} /></div>
+                        <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "6px" }}>Based on {tasks.length} work orders</div>
+                      </div>
+                    </div>
+                  </section>
+
+                  {/* Lag Analysis */}
+                  <section className="glass-panel" style={{ padding: "24px" }}>
+                    <h4 style={{ fontSize: "14px", fontWeight: 700, marginBottom: "12px" }}>⏱️ Schedule Lag Analysis</h4>
+                    <div style={{ padding: "12px 20px", borderRadius: "var(--radius-sm)", backgroundColor: isOverdue ? "rgba(239,68,68,0.08)" : lagDays === null ? "var(--bg-base)" : "rgba(34,197,94,0.08)", border: `1px solid ${isOverdue ? "var(--error)" : lagDays === null ? "var(--border)" : "var(--success)"}`, marginBottom: "16px", display: "inline-block" }}>
+                      <div style={{ fontSize: "11px", color: "var(--text-muted)", textTransform: "uppercase" }}>Schedule Variance</div>
+                      <div style={{ fontSize: "20px", fontWeight: 800, color: isOverdue ? "var(--error)" : lagDays === null ? "var(--text-secondary)" : "var(--success)" }}>
+                        {lagDays === null ? "No end date set" : isOverdue ? `+${lagDays} days behind schedule` : lagDays === 0 ? "On schedule" : `-${Math.abs(lagDays)} days ahead`}
+                      </div>
+                    </div>
+                    <div>
+                      <label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Lag Reason / Remarks (for audit trail)</label>
+                      <textarea
+                        placeholder="Document reasons for schedule variance..."
+                        rows={3}
+                        style={{ width: "100%", padding: "10px", fontFamily: "inherit", fontSize: "13px" }}
+                        defaultValue={project.lagReason || ""}
+                        onBlur={async (e) => {
+                          await fetch(`/api/projects/${project.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lagReason: e.target.value }) });
+                        }}
+                      />
+                      <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "4px" }}>Auto-saves on blur. Used for downstream auditing.</div>
+                    </div>
+                  </section>
+                </div>
+
+                <section className="glass-panel" style={{ padding: "24px" }}>
+                  <h4 style={{ fontSize: "14px", fontWeight: 700, marginBottom: "16px" }}>Project Team</h4>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px", background: "var(--bg-base)", borderRadius: "var(--radius-sm)" }}>
+                      <div style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--accent)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "13px" }}>{project.manager.firstName[0]}</div>
+                      <div><div style={{ fontSize: "13px", fontWeight: 600 }}>{project.manager.firstName} {project.manager.lastName}</div><div style={{ fontSize: "11px", color: "var(--text-muted)" }}>Project Manager</div></div>
+                    </div>
+                    {project.engineers.map(e => (
+                      <div key={e.id} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px", background: "var(--bg-base)", borderRadius: "var(--radius-sm)" }}>
+                        <div style={{ width: 32, height: 32, borderRadius: "50%", background: "rgba(99,102,241,0.3)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "13px" }}>{e.firstName[0]}</div>
+                        <div><div style={{ fontSize: "13px", fontWeight: 600 }}>{e.firstName} {e.lastName}</div><div style={{ fontSize: "11px", color: "var(--text-muted)" }}>{e.role.replace(/_/g, " ")}</div></div>
+                      </div>
+                    ))}
+                  </div>
+                  {project.description && (
+                    <div style={{ marginTop: "16px", paddingTop: "16px", borderTop: "1px solid var(--border)" }}>
+                      <div style={{ fontSize: "11px", color: "var(--text-muted)", textTransform: "uppercase", marginBottom: "6px" }}>Description</div>
+                      <p style={{ fontSize: "13px", color: "var(--text-secondary)", lineHeight: "1.6" }}>{project.description}</p>
+                    </div>
+                  )}
+                </section>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* TEAM — Head Office only */}
+        {isHeadOffice && activeTab === "crew" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
             <h4 style={{ fontSize: "16px", fontWeight: 700 }}>Project Team</h4>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "16px" }}>
@@ -687,7 +746,7 @@ export default function ProjectWorkspace({
                               <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", marginTop: "8px", color: "var(--text-muted)" }}>
                                 <span>📅 {task.dueDate}</span><span>👤 {task.assignee ? task.assignee.firstName : "Unassigned"}</span>
                               </div>
-                              {(!isSE || task.assigneeId === currentUser.id) && (
+                              {(!isOE || task.assigneeId === currentUser.id) && (
                                 <div style={{ display: "flex", gap: "4px", marginTop: "8px", borderTop: "1px solid var(--border)", paddingTop: "8px" }}>
                                   {task.status !== "DRAFT" && <button onClick={() => { const s = ["DRAFT","PENDING_APPROVAL","APPROVED","IN_PROGRESS","COMPLETED"]; const i = s.indexOf(task.status); if (i > 0) handleTaskStatusChange(task.id, s[i-1], task.progress); }} style={{ flex: 1, padding: "2px", fontSize: "9px" }} className="btn btn-secondary">◀</button>}
                                   {task.status !== "COMPLETED" && <button onClick={() => { const s = ["DRAFT","PENDING_APPROVAL","APPROVED","IN_PROGRESS","COMPLETED"]; const i = s.indexOf(task.status); if (i < s.length-1) handleTaskStatusChange(task.id, s[i+1], task.progress); }} style={{ flex: 1, padding: "2px", fontSize: "9px" }} className="btn btn-secondary">▶</button>}
@@ -785,7 +844,7 @@ export default function ProjectWorkspace({
                   <h4 style={{ fontSize: "16px", fontWeight: 700 }}>Site Visitor Log</h4>
                   <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginTop: "4px" }}>Record all visitors who access the construction site for safety and compliance.</p>
                 </div>
-                {isPM && (
+                {isHeadOffice && (
                   <div className="glass-panel" style={{ padding: "24px", border: "1px dashed var(--border)" }}>
                     <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--accent)", textTransform: "uppercase", letterSpacing: "0.5px" }}>👥 Log New Visitor</span>
                     <form onSubmit={handleCreateVisitor}>
@@ -834,7 +893,7 @@ export default function ProjectWorkspace({
                   <h4 style={{ fontSize: "16px", fontWeight: 700 }}>Site Inspection Records</h4>
                   <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginTop: "4px" }}>Document site inspections, safety audits, and quality checks.</p>
                 </div>
-                {isSE && (
+                {(isCE || isPM || isHeadOffice) && (
                   <div className="glass-panel" style={{ padding: "24px", border: "1px dashed var(--border)" }}>
                     <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--accent)", textTransform: "uppercase", letterSpacing: "0.5px" }}>🔍 New Inspection Record</span>
                     <form onSubmit={handleCreateInspection}>
@@ -877,7 +936,7 @@ export default function ProjectWorkspace({
         )}
 
         {/* INVENTORY */}
-        {!isSE && activeTab === "inventory" && (
+        {!isOE && activeTab === "inventory" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
             {/* Header */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border)", paddingBottom: "12px" }}>
@@ -980,9 +1039,9 @@ export default function ProjectWorkspace({
         {/* REPORTS */}
         {activeTab === "reports" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-            {isSE ? (
+            {isOE ? (
               <div style={{ display: "flex", flexDirection: "column", gap: "16px", alignItems: "flex-start" }}>
-                <p style={{ color: "var(--text-muted)", fontSize: "13px" }}>Site Engineers do not have compilation or read access to high-level Weekly &amp; Monthly Reports.</p>
+                <p style={{ color: "var(--text-muted)", fontSize: "13px" }}>Office Engineers do not have compilation or read access to high-level Weekly &amp; Monthly Reports.</p>
                 <button
                   onClick={() => {
                     setActiveTab("daily-logs");
@@ -1009,14 +1068,21 @@ export default function ProjectWorkspace({
         {/* DOCUMENTS — unified with category tabs */}
         {activeTab === "documents" && (
           <section className="glass-panel" style={{ padding: "24px" }}>
-            <ProjectDocuments projectId={project.id} initialDocuments={project.documents} canUpload={!isSE} />
+            <ProjectDocuments projectId={project.id} initialDocuments={project.documents} canUpload={!isOE} />
           </section>
         )}
 
         {/* SCHEDULE */}
         {activeTab === "schedule" && (
           <section className="glass-panel" style={{ padding: "24px" }}>
-            <MilestonesList projectId={project.id} initialMilestones={project.milestones} canEdit={canModifyTasks} />
+            <div style={{ marginBottom: "20px" }}>
+              <h4 style={{ fontSize: "16px", fontWeight: 700 }}>Master Project Schedule</h4>
+              <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginTop: "4px" }}>
+                Upload an Excel (.xlsx) schedule file. It will be parsed into WBS, Resource, and Budget segments.
+                You can re-upload at any time to update the schedule.
+              </p>
+            </div>
+            <ScheduleUploader projectId={project.id} />
           </section>
         )}
 

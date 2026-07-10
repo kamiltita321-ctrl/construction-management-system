@@ -9,15 +9,15 @@ import { Role } from "@prisma/client";
  */
 export async function requireAuth(allowedRoles?: Role[]) {
   const session = await getSession();
-  
+
   if (!session) {
     redirect("/login");
   }
-  
+
   if (allowedRoles && !allowedRoles.includes(session.role as Role)) {
     redirect("/forbidden");
   }
-  
+
   return session;
 }
 
@@ -27,7 +27,7 @@ export async function requireAuth(allowedRoles?: Role[]) {
  */
 export async function verifyApiAuth(allowedRoles?: Role[]) {
   const session = await getSession();
-  
+
   if (!session) {
     return {
       authorized: false as const,
@@ -37,7 +37,7 @@ export async function verifyApiAuth(allowedRoles?: Role[]) {
       }),
     };
   }
-  
+
   if (allowedRoles && !allowedRoles.includes(session.role as Role)) {
     return {
       authorized: false as const,
@@ -47,13 +47,14 @@ export async function verifyApiAuth(allowedRoles?: Role[]) {
       }),
     };
   }
-  
+
   return {
     authorized: true as const,
     session,
   };
 }
 
+/** Head Office leadership roles — full system access */
 export const EXECUTIVE_ROLES: Role[] = [
   Role.SYSTEM_ADMIN,
   Role.GENERAL_MANAGER,
@@ -61,7 +62,47 @@ export const EXECUTIVE_ROLES: Role[] = [
   Role.VP_OF_CONSTRUCTION,
 ];
 
+/** All field/office roles that are project-scoped (non-executive) */
+export const FIELD_ROLES: Role[] = [
+  Role.PROJECT_MANAGER,
+  Role.CONSTRUCTION_ENGINEER,
+  Role.OFFICE_ENGINEER,
+];
+
+/** Roles that can initiate and QC Work Orders */
+export const WORK_ORDER_ROLES: Role[] = [
+  ...EXECUTIVE_ROLES,
+  Role.PROJECT_MANAGER,
+  Role.CONSTRUCTION_ENGINEER,
+];
+
+/** Roles that can approve Change Orders */
+export const CO_APPROVAL_ROLES: Role[] = [...EXECUTIVE_ROLES];
+
+/** Roles that can create Change Order requests */
+export const CO_REQUEST_ROLES: Role[] = [...EXECUTIVE_ROLES, Role.PROJECT_MANAGER];
+
+/** Roles that can log Visitor entries */
+export const VISITOR_LOG_ROLES: Role[] = [...EXECUTIVE_ROLES];
+
+/** Roles that can create Inspection requests */
+export const INSPECTION_CREATE_ROLES: Role[] = [
+  ...EXECUTIVE_ROLES,
+  Role.PROJECT_MANAGER,
+  Role.CONSTRUCTION_ENGINEER,
+];
+
+/** Roles that can encode final Inspection results */
+export const INSPECTION_RESULT_ROLES: Role[] = [
+  ...EXECUTIVE_ROLES,
+  Role.PROJECT_MANAGER,
+  Role.OFFICE_ENGINEER,
+];
+
 export function isExecutive(role: Role): boolean {
   return EXECUTIVE_ROLES.includes(role);
 }
 
+export function isHeadOffice(role: string): boolean {
+  return EXECUTIVE_ROLES.includes(role as Role);
+}

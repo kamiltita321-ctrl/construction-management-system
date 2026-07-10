@@ -1,0 +1,14 @@
+-- Step 1: Expand the enum to include ALL old + new values temporarily
+ALTER TABLE `User` MODIFY COLUMN `role` ENUM(
+  'SYSTEM_ADMIN',
+  'GENERAL_MANAGER',
+  'DEPUTY_GENERAL_MANAGER',
+  'VP_OF_CONSTRUCTION',
+  'PROJECT_MANAGER',
+  'SITE_ENGINEER',
+  'CONSTRUCTION_ENGINEER',
+  'OFFICE_ENGINEER'
+) NOT NULL;
+
+-- Step 2: Migrate existing SITE_ENGINEER rows to OFFICE_ENGINEER
+UPDATE `User` SET role = 'OFFICE_ENGINEER' WHERE role = 'SITE_ENGINEER';

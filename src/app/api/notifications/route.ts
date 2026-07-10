@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
     const alerts: Array<{ id: string; type: string; title: string; message: string; date: string }> = [];
 
     // 1. Check for Project low stock alerts (All Roles except Site Engineer)
-    if (role !== Role.SITE_ENGINEER) {
+    if (role !== Role.OFFICE_ENGINEER) {
       const lowStockMaterials = await prisma.material.findMany({
         where: {
           stockCount: {
@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
     let pendingCOQuery = undefined;
     if (role === Role.PROJECT_MANAGER) {
       pendingCOQuery = { project: { managerId: userId }, status: OrderStatus.PENDING_APPROVAL };
-    } else if (role !== Role.SITE_ENGINEER) {
+    } else if (role !== Role.OFFICE_ENGINEER) {
       pendingCOQuery = { status: OrderStatus.PENDING_APPROVAL };
     }
 
@@ -65,7 +65,7 @@ export async function GET(req: NextRequest) {
     threeDaysFromNow.setDate(threeDaysFromNow.getDate() + 3);
 
     let pendingTasksQuery = undefined;
-    if (role === Role.SITE_ENGINEER) {
+    if (role === Role.OFFICE_ENGINEER) {
       pendingTasksQuery = {
         assigneeId: userId,
         status: { not: OrderStatus.COMPLETED },

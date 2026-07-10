@@ -19,7 +19,7 @@ async function checkProjectAccess(userId: string, role: Role, projectId: string)
     return !!project;
   }
 
-  if (role === Role.SITE_ENGINEER) {
+  if (role === Role.OFFICE_ENGINEER || role === Role.CONSTRUCTION_ENGINEER) {
     const project = await prisma.project.findFirst({
       where: {
         id: projectId,
@@ -117,7 +117,7 @@ export async function PUT(
     }
 
     const body = await req.json();
-    const { name, description, location, startDate, endDate, status, budget, managerId } = body;
+    const { name, description, location, startDate, endDate, status, budget, managerId, lagReason } = body;
 
     // PM cannot transfer project managership
     let finalManagerId = managerId;
@@ -136,6 +136,7 @@ export async function PUT(
         status,
         budget: budget !== undefined ? parseFloat(budget) : undefined,
         managerId: finalManagerId,
+        lagReason: lagReason !== undefined ? lagReason : undefined,
       },
     });
 

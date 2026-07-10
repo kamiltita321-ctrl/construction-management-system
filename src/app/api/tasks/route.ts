@@ -13,7 +13,7 @@ export async function GET() {
     let tasks;
 
     // Filter tasks based on role
-    if (role === Role.SITE_ENGINEER) {
+    if (role === Role.OFFICE_ENGINEER) {
       tasks = await prisma.task.findMany({
         where: {
           project: {

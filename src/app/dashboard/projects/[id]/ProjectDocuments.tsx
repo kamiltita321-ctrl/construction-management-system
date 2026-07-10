@@ -11,6 +11,9 @@ interface Document {
   fileSize: number;
   uploadedBy: string;
   createdAt: string;
+  confidentialityLevel?: number;
+  referenceNumber?: string | null;
+  documentDate?: string | null;
 }
 
 interface ProjectDocumentsProps {
@@ -50,11 +53,15 @@ export default function ProjectDocuments({
   const [documents, setDocuments] = useState<Document[]>(initialDocuments);
   const [isUploading, setIsUploading] = useState(false);
   const [activeCategory, setActiveCategory] = useState("ALL");
+  const [activeLevel, setActiveLevel] = useState<number | null>(null);
 
   // Form state
   const [title, setTitle] = useState("");
   const [fileType, setFileType] = useState(defaultFileType);
   const [file, setFile] = useState<File | null>(null);
+  const [confidentialityLevel, setConfidentialityLevel] = useState(3);
+  const [referenceNumber, setReferenceNumber] = useState("");
+  const [documentDate, setDocumentDate] = useState("");
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const formatBytes = (bytes: number) => {
@@ -90,6 +97,9 @@ export default function ProjectDocuments({
       formData.append("title", title);
       formData.append("fileType", fileType);
       formData.append("projectId", projectId);
+      formData.append("confidentialityLevel", String(confidentialityLevel));
+      if (referenceNumber) formData.append("referenceNumber", referenceNumber);
+      if (documentDate) formData.append("documentDate", documentDate);
 
       const res = await fetch("/api/uploads", { method: "POST", body: formData });
       const data = await res.json();
@@ -98,10 +108,11 @@ export default function ProjectDocuments({
         setMessage({ type: "success", text: "File uploaded successfully!" });
         setTitle("");
         setFile(null);
+        setReferenceNumber("");
+        setDocumentDate("");
         const fileInput = document.getElementById("doc-file-input") as HTMLInputElement;
         if (fileInput) fileInput.value = "";
         setDocuments([data.document, ...documents]);
-        // Switch category view to show newly uploaded file
         setActiveCategory(fileType);
         router.refresh();
       } else {
@@ -119,7 +130,8 @@ export default function ProjectDocuments({
     ? documents
     : documents.filter(d => d.fileType === activeCategory);
 
-  // Count per category
+  const levelFiltered = activeLevel === null ? filtered : filtered.filter(d => (d.confidentialityLevel ?? 3) === activeLevel);
+
   const countFor = (type: string) =>
     type === "ALL" ? documents.length : documents.filter(d => d.fileType === type).length;
 
@@ -151,31 +163,33 @@ export default function ProjectDocuments({
           <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
               <div>
-                <label htmlFor="doc-title" style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>
-                  File Title *
-                </label>
-                <input
-                  id="doc-title" type="text" value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="e.g. Foundation Blueprint Rev.2"
-                  style={{ width: "100%", padding: "8px 12px" }}
-                  required
-                />
+                <label htmlFor="doc-title" style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>File Title *</label>
+                <input id="doc-title" type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Foundation Blueprint Rev.2" style={{ width: "100%", padding: "8px 12px" }} required />
               </div>
               <div>
-                <label htmlFor="doc-type" style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>
-                  Category *
-                </label>
-                <select
-                  id="doc-type" value={fileType}
-                  onChange={(e) => setFileType(e.target.value)}
-                  style={{ width: "100%", padding: "8px 12px" }}
-                >
+                <label htmlFor="doc-type" style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Category *</label>
+                <select id="doc-type" value={fileType} onChange={(e) => setFileType(e.target.value)} style={{ width: "100%", padding: "8px 12px" }}>
                   <option value="DRAWING">📐 Structural Drawing</option>
                   <option value="IMAGE">📷 Site Photo / Image</option>
                   <option value="CONTRACT">📄 Contract Document</option>
                   <option value="REPORT">📝 Report Attachment</option>
                   <option value="PDF">📕 PDF Reference</option>
+                </select>
+              </div>
+              <div>
+                <label htmlFor="doc-ref" style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Reference Number</label>
+                <input id="doc-ref" type="text" placeholder="e.g. DWG-001-REV2" style={{ width: "100%", padding: "8px 12px" }} value={referenceNumber} onChange={(e) => setReferenceNumber(e.target.value)} />
+              </div>
+              <div>
+                <label htmlFor="doc-date" style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Document Date</label>
+                <input id="doc-date" type="date" style={{ width: "100%", padding: "8px 12px" }} value={documentDate} onChange={(e) => setDocumentDate(e.target.value)} />
+              </div>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label htmlFor="doc-level" style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Confidentiality Level *</label>
+                <select id="doc-level" value={confidentialityLevel} onChange={(e) => setConfidentialityLevel(parseInt(e.target.value))} style={{ width: "100%", padding: "8px 12px" }}>
+                  <option value={3}>🟢 Level 3 — Shared (all team members)</option>
+                  <option value={2}>🟡 Level 2 — Restricted (PM and above)</option>
+                  <option value={1}>🔴 Level 1 — Confidential (Head Office only)</option>
                 </select>
               </div>
             </div>

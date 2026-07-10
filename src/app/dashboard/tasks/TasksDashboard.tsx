@@ -85,7 +85,7 @@ export default function TasksDashboard({
 
   const [isLoading, setIsLoading] = useState(false);
 
-  const isSE = currentUser.role === "SITE_ENGINEER";
+  const isSE = currentUser.role === "OFFICE_ENGINEER";
   const isPM = currentUser.role === "PROJECT_MANAGER";
   const isGMorDGM = currentUser.role === "GENERAL_MANAGER" || currentUser.role === "DEPUTY_GENERAL_MANAGER";
   const canCreate = currentUser.role === "SYSTEM_ADMIN" || currentUser.role === "VP_OF_CONSTRUCTION" || isPM;
