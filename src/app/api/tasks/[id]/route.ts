@@ -73,7 +73,7 @@ export async function PUT(
       if (progress !== undefined) updateData.progress = parseInt(progress) || 0;
       if (assigneeId !== undefined) updateData.assigneeId = assigneeId || null;
     } else if (check.isAssignee) {
-      // Site Engineers can only update progress and transition status
+      // Office Engineers can only update progress and transition status
       if (progress !== undefined) updateData.progress = Math.min(Math.max(parseInt(progress) || 0, 0), 100);
       
       if (status !== undefined) {
@@ -81,7 +81,7 @@ export async function PUT(
         if (allowedStates.includes(status)) {
           updateData.status = status as OrderStatus;
         } else {
-          return NextResponse.json({ error: "Site Engineers can only set status to IN_PROGRESS or COMPLETED" }, { status: 400 });
+          return NextResponse.json({ error: "Office Engineers can only set status to IN_PROGRESS or COMPLETED" }, { status: 400 });
         }
       }
     }

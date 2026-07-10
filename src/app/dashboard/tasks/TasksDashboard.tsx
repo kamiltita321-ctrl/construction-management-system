@@ -443,7 +443,7 @@ export default function TasksDashboard({
                             onChange={(e) => handleTaskStatusChange(task.id, e.target.value, task.progress)}
                           >
                             {COLUMNS.map((col) => {
-                              // Restrictions: Site Engineer can only set to IN_PROGRESS or COMPLETED
+                              // Restrictions: Office Engineer can only set to IN_PROGRESS or COMPLETED
                               const disabled = isSE && col.id !== "IN_PROGRESS" && col.id !== "COMPLETED";
                               return (
                                 <option key={col.id} value={col.id} disabled={disabled}>
@@ -609,7 +609,7 @@ export default function TasksDashboard({
                 <textarea placeholder="Scope of works..." rows={2} style={{ width: "100%", padding: "10px", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", fontFamily: "inherit" }} value={taskDesc} onChange={(e) => setTaskDesc(e.target.value)} />
               </div>
               <div>
-                <label style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "4px" }}>Assignee (Site Engineer)</label>
+                <label style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "4px" }}>Assignee (Office Engineer)</label>
                 <select style={{ width: "100%", padding: "10px", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)" }} value={taskAssigneeId} onChange={(e) => setTaskAssigneeId(e.target.value)}>
                   <option value="">Unassigned</option>
                   {engineers.map((eng) => <option key={eng.id} value={eng.id}>{eng.firstName} {eng.lastName}</option>)}

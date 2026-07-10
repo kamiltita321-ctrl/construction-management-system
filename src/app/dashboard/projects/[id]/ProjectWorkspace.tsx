@@ -714,7 +714,7 @@ export default function ProjectWorkspace({
               <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
                 <div>
                   <h4 style={{ fontSize: "16px", fontWeight: 700 }}>Daily Quality Control Log</h4>
-                  <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginTop: "4px" }}>Site Engineers submit daily equipment, manpower, and activity logs. Project Managers review and approve.</p>
+                  <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginTop: "4px" }}>Office Engineers submit daily equipment, manpower, and activity logs. Project Managers review and approve.</p>
                 </div>
                 <ReportsDashboard initialReports={initialReports.filter(r => r.project.id === project.id)} projects={[project as any]} currentUser={{ id: currentUser.id, role: currentUser.role, firstName: currentUser.firstName, lastName: currentUser.lastName }} />
               </div>

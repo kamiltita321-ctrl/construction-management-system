@@ -10,7 +10,7 @@ const DEMO_ACCOUNTS = [
   { role: "Deputy GM", email: "dgm@cms.com", password: "dgm123" },
   { role: "VP of Construction", email: "vp@cms.com", password: "vp123" },
   { role: "Project Manager", email: "pm@cms.com", password: "pm123" },
-  { role: "Site Engineer", email: "se@cms.com", password: "se123" },
+  { role: "Office Engineer", email: "se@cms.com", password: "se123" },
 ];
 
 export default function LoginPage() {

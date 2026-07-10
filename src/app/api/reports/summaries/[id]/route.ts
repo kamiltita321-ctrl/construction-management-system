@@ -13,7 +13,7 @@ export async function GET(
     if (!auth.authorized) return auth.response;
 
     if (auth.session.role === Role.OFFICE_ENGINEER) {
-      return NextResponse.json({ error: "Access denied. Site Engineers do not have access to Weekly/Monthly Reports." }, { status: 403 });
+      return NextResponse.json({ error: "Access denied. Office Engineers do not have access to Weekly/Monthly Reports." }, { status: 403 });
     }
 
     const { id } = await params;

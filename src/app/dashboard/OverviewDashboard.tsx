@@ -41,7 +41,7 @@ const ROLE_CONFIG: Record<string, { label: string; color: string; gradient: stri
   DEPUTY_GENERAL_MANAGER:{ label: "Deputy General Manager",color: "#a855f7", gradient: "linear-gradient(135deg, #a855f7, #7c3aed)" },
   VP_OF_CONSTRUCTION:    { label: "VP of Construction",    color: "#3b82f6", gradient: "linear-gradient(135deg, #3b82f6, #1d4ed8)" },
   PROJECT_MANAGER:       { label: "Project Manager",       color: "#f59e0b", gradient: "linear-gradient(135deg, #f59e0b, #d97706)" },
-  OFFICE_ENGINEER:         { label: "Site Engineer",         color: "#10b981", gradient: "linear-gradient(135deg, #10b981, #059669)" },
+  OFFICE_ENGINEER:         { label: "Office Engineer",       color: "#10b981", gradient: "linear-gradient(135deg, #10b981, #059669)" },
 };
 
 // SVG Donut/Progress chart component

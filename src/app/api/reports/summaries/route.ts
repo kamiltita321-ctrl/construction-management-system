@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
 
     const { role, userId } = auth.session;
     if (role === Role.OFFICE_ENGINEER) {
-      return NextResponse.json({ error: "Access denied. Site Engineers do not have access to Weekly/Monthly Reports features." }, { status: 403 });
+      return NextResponse.json({ error: "Access denied. Office Engineers do not have access to Weekly/Monthly Reports features." }, { status: 403 });
     }
     const url = new URL(req.url);
     const mode = url.searchParams.get("mode"); // "preview" or "list"
