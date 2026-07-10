@@ -7,6 +7,7 @@ import ProjectDocuments from "./ProjectDocuments";
 import ReportsDashboard from "../../reports/ReportsDashboard";
 import SummaryDashboard from "../../reports/SummaryDashboard";
 import ScheduleUploader from "./ScheduleUploader";
+import EditProjectPanel from "./EditProjectPanel";
 
 interface User {
   id: string;
@@ -26,6 +27,7 @@ interface Project {
   endDate: string | null;
   status: string;
   budget: number;
+  revisedBudget: number | null;
   category: string;
   lagReason: string | null;
   manager: User;
@@ -89,26 +91,24 @@ interface ProjectNote {
 
 interface ProjectWorkspaceProps {
   project: Project;
-  initialTasks: Task[];
-  initialChangeOrders: ChangeOrder[];
+  currentUser: User;
+  initialTasks: any[];
+  initialChangeOrders: any[];
+  teamMembers?: any[];
   initialReports: any[];
   initialSummaries: any[];
-  currentUser: {
-    id: string;
-    role: string;
-    firstName: string;
-    lastName: string;
-    email: string;
-  };
+  latestLagReason?: { text: string; reportDate: string } | null;
 }
 
 export default function ProjectWorkspace({
   project,
+  currentUser,
   initialTasks,
   initialChangeOrders,
+  teamMembers = [],
   initialReports,
   initialSummaries,
-  currentUser,
+  latestLagReason,
 }: ProjectWorkspaceProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<
@@ -172,6 +172,7 @@ export default function ProjectWorkspace({
     currentUser.role === "GENERAL_MANAGER" ||
     currentUser.role === "DEPUTY_GENERAL_MANAGER" ||
     currentUser.role === "VP_OF_CONSTRUCTION";
+  const isTopRole = isHeadOffice || isPM; // Can see Schedule, edit project
 
   // Work Orders: CE initiates/QCs, PM approves, Head Office oversees
   const canModifyTasks = isHeadOffice || isPM || isCE;
@@ -542,7 +543,7 @@ export default function ProjectWorkspace({
           ...(!isOE ? [{ id: "inventory", label: "📦 Inventory" }] : []),
           { id: "reports",    label: "📝 Reports" },
           { id: "documents",  label: "📁 Documents" },
-          { id: "schedule",   label: "📅 Schedule" },
+          ...(isTopRole ? [{ id: "schedule", label: "📅 Schedule" }] : []),
         ].map((tab) => (
           <button
             key={tab.id}
@@ -570,20 +571,27 @@ export default function ProjectWorkspace({
         {/* OVERVIEW */}
         {activeTab === "dashboard" && (() => {
           const approvedCOs = changeOrders.filter(co => co.status === "APPROVED");
-          const revisedBudget = project.budget + approvedCOs.reduce((s, co) => s + co.estimatedCost, 0);
+          const coBudget = project.budget + approvedCOs.reduce((s, co) => s + co.estimatedCost, 0);
+          const displayRevisedBudget = project.revisedBudget ?? coBudget;
           const physicalProgress = tasks.length > 0 ? Math.round(tasks.reduce((s, t) => s + t.progress, 0) / tasks.length) : 0;
           const today = new Date();
           const endDate = project.endDate ? new Date(project.endDate) : null;
           const lagDays = endDate ? Math.round((today.getTime() - endDate.getTime()) / (1000 * 60 * 60 * 24)) : null;
           const isOverdue = lagDays !== null && lagDays > 0;
+
           return (
             <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-              {/* Category badge */}
-              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                <span style={{ padding: "4px 14px", borderRadius: "var(--radius-full)", fontSize: "11px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "1px", backgroundColor: project.category === "HIGHWAY" ? "rgba(251,146,60,0.15)" : project.category === "INFRASTRUCTURE" ? "rgba(99,102,241,0.15)" : "rgba(34,197,94,0.15)", color: project.category === "HIGHWAY" ? "#fb923c" : project.category === "INFRASTRUCTURE" ? "var(--accent)" : "var(--success)" }}>
-                  {project.category === "HIGHWAY" ? "🛣️ Highway" : project.category === "INFRASTRUCTURE" ? "🏗️ Infrastructure" : "🏢 Building"}
-                </span>
-                <span style={{ fontSize: "13px", color: "var(--text-secondary)" }}>Project Classification</span>
+              {/* Category badge + Edit button */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                  <span style={{ padding: "4px 14px", borderRadius: "var(--radius-full)", fontSize: "11px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "1px", backgroundColor: project.category === "HIGHWAY" ? "rgba(251,146,60,0.15)" : project.category === "INFRASTRUCTURE" ? "rgba(99,102,241,0.15)" : "rgba(34,197,94,0.15)", color: project.category === "HIGHWAY" ? "#fb923c" : project.category === "INFRASTRUCTURE" ? "var(--accent)" : "var(--success)" }}>
+                    {project.category === "HIGHWAY" ? "🛣️ Highway" : project.category === "INFRASTRUCTURE" ? "🏗️ Infrastructure" : "🏢 Building"}
+                  </span>
+                  <span style={{ fontSize: "13px", color: "var(--text-secondary)" }}>Project Classification</span>
+                </div>
+                {isTopRole && (
+                  <EditProjectPanel project={project} />
+                )}
               </div>
 
               <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "24px", alignItems: "start" }}>
@@ -598,6 +606,13 @@ export default function ProjectWorkspace({
                       <div><span style={{ display: "block", fontSize: "11px", color: "var(--text-muted)", textTransform: "uppercase" }}>Status</span><span style={{ fontSize: "14px", fontWeight: 600 }}>{project.status.replace(/_/g, " ")}</span></div>
                       <div><span style={{ display: "block", fontSize: "11px", color: "var(--text-muted)", textTransform: "uppercase" }}>Start Date</span><span style={{ fontSize: "14px", fontWeight: 600 }}>{project.startDate}</span></div>
                       <div><span style={{ display: "block", fontSize: "11px", color: "var(--text-muted)", textTransform: "uppercase" }}>End Date</span><span style={{ fontSize: "14px", fontWeight: 600 }}>{project.endDate ?? "TBD"}</span></div>
+                      {project.revisedBudget && (
+                        <div style={{ gridColumn: "1 / -1", padding: "10px 14px", background: "rgba(99,102,241,0.08)", borderRadius: "var(--radius-sm)", border: "1px solid var(--accent)" }}>
+                          <span style={{ display: "block", fontSize: "11px", color: "var(--accent)", textTransform: "uppercase", fontWeight: 700 }}>Contract Revised Budget</span>
+                          <span style={{ fontSize: "16px", fontWeight: 800, color: "var(--accent)" }}>{formatCurrency(project.revisedBudget)}</span>
+                          <span style={{ fontSize: "11px", color: "var(--text-muted)", marginLeft: "8px" }}>Δ {formatCurrency(project.revisedBudget - project.budget)} from baseline</span>
+                        </div>
+                      )}
                     </div>
                   </section>
 
@@ -608,8 +623,11 @@ export default function ProjectWorkspace({
                       <div style={{ padding: "16px", background: "var(--bg-base)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" }}>
                         <div style={{ fontSize: "11px", color: "var(--text-muted)", textTransform: "uppercase", marginBottom: "8px" }}>Budget Comparison</div>
                         <div style={{ fontSize: "12px", display: "flex", justifyContent: "space-between", marginBottom: "4px" }}><span style={{ color: "var(--text-secondary)" }}>Baseline:</span><span style={{ fontWeight: 700 }}>{formatCurrency(project.budget)}</span></div>
-                        <div style={{ fontSize: "12px", display: "flex", justifyContent: "space-between", marginBottom: "4px" }}><span style={{ color: "var(--text-secondary)" }}>Revised (w/ COs):</span><span style={{ fontWeight: 700, color: revisedBudget > project.budget ? "var(--warning)" : "var(--success)" }}>{formatCurrency(revisedBudget)}</span></div>
-                        <div style={{ fontSize: "11px", borderTop: "1px solid var(--border)", paddingTop: "4px", marginTop: "4px", display: "flex", justifyContent: "space-between" }}><span style={{ color: "var(--text-muted)" }}>CO Additions:</span><span style={{ color: "var(--accent)" }}>+{formatCurrency(revisedBudget - project.budget)}</span></div>
+                        {project.revisedBudget && (
+                          <div style={{ fontSize: "12px", display: "flex", justifyContent: "space-between", marginBottom: "4px" }}><span style={{ color: "var(--accent)" }}>Contract Revised:</span><span style={{ fontWeight: 700, color: "var(--accent)" }}>{formatCurrency(project.revisedBudget)}</span></div>
+                        )}
+                        <div style={{ fontSize: "12px", display: "flex", justifyContent: "space-between", marginBottom: "4px" }}><span style={{ color: "var(--text-secondary)" }}>Revised (w/ COs):</span><span style={{ fontWeight: 700, color: coBudget > project.budget ? "var(--warning)" : "var(--success)" }}>{formatCurrency(coBudget)}</span></div>
+                        <div style={{ fontSize: "11px", borderTop: "1px solid var(--border)", paddingTop: "4px", marginTop: "4px", display: "flex", justifyContent: "space-between" }}><span style={{ color: "var(--text-muted)" }}>CO Additions:</span><span style={{ color: "var(--accent)" }}>+{formatCurrency(coBudget - project.budget)}</span></div>
                       </div>
                       <div style={{ padding: "16px", background: "var(--bg-base)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" }}>
                         <div style={{ fontSize: "11px", color: "var(--text-muted)", textTransform: "uppercase", marginBottom: "8px" }}>Physical Progress</div>
@@ -620,7 +638,7 @@ export default function ProjectWorkspace({
                     </div>
                   </section>
 
-                  {/* Lag Analysis */}
+                  {/* Lag Analysis — read-only from daily reports */}
                   <section className="glass-panel" style={{ padding: "24px" }}>
                     <h4 style={{ fontSize: "14px", fontWeight: 700, marginBottom: "12px" }}>⏱️ Schedule Lag Analysis</h4>
                     <div style={{ padding: "12px 20px", borderRadius: "var(--radius-sm)", backgroundColor: isOverdue ? "rgba(239,68,68,0.08)" : lagDays === null ? "var(--bg-base)" : "rgba(34,197,94,0.08)", border: `1px solid ${isOverdue ? "var(--error)" : lagDays === null ? "var(--border)" : "var(--success)"}`, marginBottom: "16px", display: "inline-block" }}>
@@ -629,18 +647,17 @@ export default function ProjectWorkspace({
                         {lagDays === null ? "No end date set" : isOverdue ? `+${lagDays} days behind schedule` : lagDays === 0 ? "On schedule" : `-${Math.abs(lagDays)} days ahead`}
                       </div>
                     </div>
-                    <div>
-                      <label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Lag Reason / Remarks (for audit trail)</label>
-                      <textarea
-                        placeholder="Document reasons for schedule variance..."
-                        rows={3}
-                        style={{ width: "100%", padding: "10px", fontFamily: "inherit", fontSize: "13px" }}
-                        defaultValue={project.lagReason || ""}
-                        onBlur={async (e) => {
-                          await fetch(`/api/projects/${project.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lagReason: e.target.value }) });
-                        }}
-                      />
-                      <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "4px" }}>Auto-saves on blur. Used for downstream auditing.</div>
+                    {/* Latest lag reason from daily reports — read-only */}
+                    <div style={{ padding: "14px 16px", borderRadius: "var(--radius-sm)", background: "var(--bg-base)", border: "1px solid var(--border)" }}>
+                      <div style={{ fontSize: "11px", color: "var(--text-muted)", textTransform: "uppercase", marginBottom: "6px" }}>📋 Latest Lag Reason (from Daily Report)</div>
+                      {latestLagReason ? (
+                        <>
+                          <p style={{ fontSize: "13px", color: "var(--text-primary)", lineHeight: "1.6", margin: 0 }}>{latestLagReason.text}</p>
+                          <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "6px" }}>Reported: {new Date(latestLagReason.reportDate).toLocaleDateString("en-US", { weekday: "short", year: "numeric", month: "short", day: "numeric" })}</div>
+                        </>
+                      ) : (
+                        <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: 0, fontStyle: "italic" }}>No lag reason logged yet. Office Engineers can add one in the Daily Report form.</p>
+                      )}
                     </div>
                   </section>
                 </div>
@@ -670,6 +687,7 @@ export default function ProjectWorkspace({
             </div>
           );
         })()}
+
 
         {/* TEAM — Head Office only */}
         {isHeadOffice && activeTab === "crew" && (

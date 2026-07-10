@@ -117,7 +117,7 @@ export async function PUT(
     }
 
     const body = await req.json();
-    const { name, description, location, startDate, endDate, status, budget, managerId, lagReason } = body;
+    const { name, description, location, startDate, endDate, status, budget, revisedBudget, category, managerId, lagReason } = body;
 
     // PM cannot transfer project managership
     let finalManagerId = managerId;
@@ -135,6 +135,8 @@ export async function PUT(
         endDate: endDate === null ? null : endDate ? new Date(endDate) : undefined,
         status,
         budget: budget !== undefined ? parseFloat(budget) : undefined,
+        revisedBudget: revisedBudget !== undefined ? (revisedBudget === null ? null : parseFloat(revisedBudget)) : undefined,
+        category: category !== undefined ? category : undefined,
         managerId: finalManagerId,
         lagReason: lagReason !== undefined ? lagReason : undefined,
       },

@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { verifyApiAuth } from "@/lib/auth-server";
+import { Role } from "@prisma/client";
+
+// Roles allowed to access the Master Schedule
+const SCHEDULE_ROLES: Role[] = [
+  Role.SYSTEM_ADMIN,
+  Role.GENERAL_MANAGER,
+  Role.DEPUTY_GENERAL_MANAGER,
+  Role.VP_OF_CONSTRUCTION,
+  Role.PROJECT_MANAGER,
+];
 
 // GET /api/projects/[id]/schedule - Retrieve master schedule
 export async function GET(
@@ -8,7 +18,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await verifyApiAuth();
+    const auth = await verifyApiAuth(SCHEDULE_ROLES);
     if (!auth.authorized) return auth.response;
     const { id } = await params;
 
@@ -29,7 +39,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await verifyApiAuth();
+    const auth = await verifyApiAuth(SCHEDULE_ROLES);
     if (!auth.authorized) return auth.response;
 
     const { id } = await params;

@@ -72,11 +72,12 @@ model Project {
   startDate   DateTime
   endDate     DateTime?
   status      ProjectStatus @default(PLANNING)
-  budget      Float         @default(0.0)
-  category    String        @default("BUILDING") // "BUILDING", "HIGHWAY", "INFRASTRUCTURE"
-  lagReason   String?       @db.Text
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  budget        Float         @default(0.0)
+  revisedBudget Float?        // Explicitly entered revised contract amount
+  category      String        @default("BUILDING") // "BUILDING", "HIGHWAY", "INFRASTRUCTURE"
+  lagReason     String?       @db.Text
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 
   // Manager and Engineers
   managerId String
@@ -233,6 +234,7 @@ model DailyReport {
   weather       String?
   dailyCost     Float? // Encoded by Office Engineer after the fact
   dailyProfit   Float? // Encoded by Office Engineer after the fact
+  lagReason     String? @db.Text // Schedule variance reason entered by OE
 
   projectId String
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)

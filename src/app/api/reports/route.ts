@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { projectId, reportDate, workCompleted, issuesFaced, weather, photos, materials } = body;
+    const { projectId, reportDate, workCompleted, issuesFaced, weather, photos, materials, dailyCost, dailyProfit, lagReason } = body;
 
     if (!projectId || !reportDate || !workCompleted) {
       return NextResponse.json(
@@ -124,6 +124,9 @@ export async function POST(req: NextRequest) {
           weather: weather || null,
           submitterId: userId,
           isApproved: false,
+          dailyCost: dailyCost ? parseFloat(dailyCost) : null,
+          dailyProfit: dailyProfit ? parseFloat(dailyProfit) : null,
+          lagReason: lagReason?.trim() || null,
         },
       });
 

@@ -145,6 +145,7 @@ export default function ReportsDashboard({
   // Office Engineer — cost & profit encoding (spec §4)
   const [dailyCost, setDailyCost] = useState("");
   const [dailyProfit, setDailyProfit] = useState("");
+  const [lagReason, setLagReason] = useState("");
 
   // Autosave status
   const [autosaveStatus, setAutosaveStatus] = useState("");
@@ -366,6 +367,7 @@ export default function ReportsDashboard({
           issuesFaced: issuesFaced || null,
           weather: weather || null,
           materials: consumedMaterials.map((m) => ({ materialId: m.id, quantityUsed: m.quantity })),
+          lagReason: lagReason || null,
           ...(currentUser.role === "OFFICE_ENGINEER" && dailyCost ? { dailyCost: parseFloat(dailyCost) } : {}),
           ...(currentUser.role === "OFFICE_ENGINEER" && dailyProfit ? { dailyProfit: parseFloat(dailyProfit) } : {}),
         }),
@@ -910,9 +912,9 @@ export default function ReportsDashboard({
                     ))}
                   </div>
 
-                  <div style={{ borderTop: "1px solid var(--border)", paddingTop: "14px" }}>
-                    <label style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "4px" }}>Issues Faced</label>
-                    <textarea placeholder="e.g. weather delays, machinery breakdown..." rows={3} style={{ width: "100%", padding: "10px", background: "var(--bg-base)", border: "1px solid var(--border)", color: "var(--text-primary)", fontFamily: "inherit" }} value={issuesFaced} onChange={(e) => setIssuesFaced(e.target.value)} />
+                  <div style={{ borderTop: "1px solid var(--border)", paddingTop: "14px", marginBottom: "14px" }}>
+                    <label style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "4px" }}>Lag Reason / Schedule Remarks</label>
+                    <textarea placeholder="e.g. explain reasons for schedule variance, lag reasons, or work remarks for audit trail..." rows={2} style={{ width: "100%", padding: "10px", background: "var(--bg-base)", border: "1px solid var(--border)", color: "var(--text-primary)", fontFamily: "inherit" }} value={lagReason} onChange={(e) => setLagReason(e.target.value)} />
                   </div>
 
                   {/* Office Engineer cost & profit encoding */}

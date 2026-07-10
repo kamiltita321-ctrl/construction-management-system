@@ -92,6 +92,20 @@ export default async function ProjectDetailPage({
     orderBy: { createdAt: "desc" }
   });
 
+  const latestLagReport = await prisma.dailyReport.findFirst({
+    where: {
+      projectId: id,
+      lagReason: { not: null }
+    },
+    orderBy: { reportDate: "desc" },
+    select: { lagReason: true, reportDate: true }
+  });
+
+  const latestLagReason = latestLagReport ? {
+    text: latestLagReport.lagReason!,
+    reportDate: latestLagReport.reportDate.toISOString().split("T")[0]
+  } : null;
+
   // Serialize objects for client hydration
   const serializedProject = {
     id: project.id,
@@ -103,6 +117,7 @@ export default async function ProjectDetailPage({
     endDate: project.endDate ? project.endDate.toISOString().split("T")[0] : null,
     status: project.status,
     budget: project.budget,
+    revisedBudget: (project as any).revisedBudget ?? null,
     category: (project as any).category || "BUILDING",
     lagReason: (project as any).lagReason || null,
     manager: project.manager,
@@ -204,6 +219,7 @@ export default async function ProjectDetailPage({
         initialChangeOrders={serializedCOs}
         initialReports={serializedReports}
         initialSummaries={serializedSummaries}
+        latestLagReason={latestLagReason}
         currentUser={{
           id: userId,
           role,

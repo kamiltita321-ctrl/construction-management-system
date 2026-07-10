@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
     if (!auth.authorized) return auth.response;
 
     const body = await req.json();
-    const { name, code, description, location, startDate, endDate, budget, managerId } = body;
+    const { name, code, description, location, startDate, endDate, budget, revisedBudget, managerId } = body;
 
     if (!name || !code || !location || !startDate || !managerId) {
       return NextResponse.json(
@@ -97,6 +97,7 @@ export async function POST(req: NextRequest) {
         startDate: new Date(startDate),
         endDate: endDate ? new Date(endDate) : null,
         budget: parseFloat(budget) || 0.0,
+        revisedBudget: revisedBudget ? parseFloat(revisedBudget) : null,
         managerId,
       },
     });

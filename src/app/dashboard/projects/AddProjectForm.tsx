@@ -24,6 +24,7 @@ export default function AddProjectForm({ managers }: AddProjectFormProps) {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [budget, setBudget] = useState("");
+  const [revisedBudget, setRevisedBudget] = useState("");
   const [managerId, setManagerId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -45,6 +46,7 @@ export default function AddProjectForm({ managers }: AddProjectFormProps) {
           startDate,
           endDate: endDate || null,
           budget,
+          revisedBudget: revisedBudget || null,
           managerId,
         }),
       });
@@ -64,6 +66,7 @@ export default function AddProjectForm({ managers }: AddProjectFormProps) {
       setStartDate("");
       setEndDate("");
       setBudget("");
+      setRevisedBudget("");
       setManagerId("");
       router.refresh();
     } catch (err: any) {
@@ -255,6 +258,27 @@ export default function AddProjectForm({ managers }: AddProjectFormProps) {
                     }}
                     value={budget}
                     onChange={(e) => setBudget(e.target.value)}
+                    disabled={isLoading}
+                  />
+                </div>
+                <div>
+                  <label className="btn-secondary" style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "6px", border: "none", cursor: "default", padding: 0 }}>
+                    Revised Budget ($)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="Optional revised amount"
+                    style={{
+                      width: "100%",
+                      padding: "10px 14px",
+                      background: "rgba(0,0,0,0.15)",
+                      border: "1px solid var(--border)",
+                      borderRadius: "var(--radius-md)",
+                      color: "inherit",
+                    }}
+                    value={revisedBudget}
+                    onChange={(e) => setRevisedBudget(e.target.value)}
                     disabled={isLoading}
                   />
                 </div>
