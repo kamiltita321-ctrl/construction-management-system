@@ -346,12 +346,8 @@ export default function ReportsDashboard({
     return true;
   };
 
-  const handleSubmitReport = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (currentStep < 3) {
-      setCurrentStep(currentStep + 1);
-      return;
-    }
+  const handleSubmitReport = async (e?: any) => {
+    e?.preventDefault();
     if (!validateForm()) return;
     setIsLoading(true);
 
@@ -768,7 +764,7 @@ export default function ReportsDashboard({
               ))}
             </div>
 
-            <form onSubmit={handleSubmitReport} style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+            <form onSubmit={(e) => e.preventDefault()} style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
               
               {/* STEP 1: HEADER FIELDS */}
               {currentStep === 1 && (
@@ -1055,7 +1051,7 @@ export default function ReportsDashboard({
                   {currentStep < 3 ? (
                     <button type="button" className="btn btn-primary" style={{ backgroundColor: "var(--accent)", border: "none" }} onClick={() => setCurrentStep(currentStep + 1)}>Next</button>
                   ) : (
-                    <button type="submit" className="btn btn-primary" style={{ backgroundColor: "var(--success)", border: "none" }} disabled={isLoading}>{isLoading ? "Submitting..." : "Submit Log"}</button>
+                    <button type="button" onClick={() => handleSubmitReport()} className="btn btn-primary" style={{ backgroundColor: "var(--success)", border: "none" }} disabled={isLoading}>{isLoading ? "Submitting..." : "Submit Log"}</button>
                   )}
                 </div>
               </div>
