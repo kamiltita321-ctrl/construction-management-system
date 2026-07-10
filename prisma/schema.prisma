@@ -248,6 +248,10 @@ model DailyReport {
   photos        ReportPhoto[]
   materialUsage ReportMaterialUsage[]
 
+  lastEditedBy  String?
+  lastEditedRole String?
+  lastEditedAt   DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

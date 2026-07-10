@@ -24,9 +24,13 @@ interface DailyReport {
   isApproved: boolean;
   approvedBy: string | null;
   project: { id: string; name: string; code: string };
+  submitterId: string;
   submitter: { firstName: string; lastName: string };
   materialUsage: MaterialUsage[];
   photos: Photo[];
+  lastEditedBy?: string | null;
+  lastEditedRole?: string | null;
+  lastEditedAt?: string | null;
 }
 
 interface Project {
@@ -146,6 +150,7 @@ export default function ReportsDashboard({
   const [dailyCost, setDailyCost] = useState("");
   const [dailyProfit, setDailyProfit] = useState("");
   const [lagReason, setLagReason] = useState("");
+  const [editingReportId, setEditingReportId] = useState<string | null>(null);
 
   // Autosave status
   const [autosaveStatus, setAutosaveStatus] = useState("");
@@ -343,6 +348,10 @@ export default function ReportsDashboard({
 
   const handleSubmitReport = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (currentStep < 3) {
+      setCurrentStep(currentStep + 1);
+      return;
+    }
     if (!validateForm()) return;
     setIsLoading(true);
 
@@ -357,8 +366,10 @@ export default function ReportsDashboard({
     });
 
     try {
-      const res = await fetch("/api/reports", {
-        method: "POST",
+      const url = editingReportId ? `/api/reports/${editingReportId}` : "/api/reports";
+      const method = editingReportId ? "PUT" : "POST";
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           projectId: reportProjId,
@@ -370,6 +381,7 @@ export default function ReportsDashboard({
           lagReason: lagReason || null,
           ...(currentUser.role === "OFFICE_ENGINEER" && dailyCost ? { dailyCost: parseFloat(dailyCost) } : {}),
           ...(currentUser.role === "OFFICE_ENGINEER" && dailyProfit ? { dailyProfit: parseFloat(dailyProfit) } : {}),
+          ...(editingReportId ? { action: "edit" } : {}),
         }),
       });
 
@@ -401,6 +413,7 @@ export default function ReportsDashboard({
         setManpowerLog([{ jobTitleId: "", quantity: "", manHour: "" }]);
         setConsumedMaterials([]);
         setIsSubmitOpen(false);
+        setEditingReportId(null);
         setCurrentStep(1);
         router.refresh();
       } else {
@@ -433,6 +446,59 @@ export default function ReportsDashboard({
     } catch (err) {
       console.error(err);
     }
+  };
+
+  const handleStartEdit = (report: any) => {
+    // Populate form fields
+    setReportProjId(report.projectId);
+    setReportDate(report.reportDate);
+    setWeather(report.weather || "");
+    setIssuesFaced(report.issuesFaced || "");
+    setDailyCost(report.dailyCost ? String(report.dailyCost) : "");
+    setDailyProfit(report.dailyProfit ? String(report.dailyProfit) : "");
+    setLagReason(report.lagReason || "");
+    
+    // Parse workCompleted JSON
+    let parsed: any = null;
+    try {
+      if (report.workCompleted.startsWith("{")) {
+        parsed = JSON.parse(report.workCompleted);
+      }
+    } catch {}
+
+    if (parsed) {
+      setLotSection(parsed.lotSection || "");
+      setActivityId(parsed.activityId || "");
+      setCrewNo(parsed.crewNo || "");
+      setCrewLeader(parsed.crewLeader || "");
+      setEquipmentLog(parsed.equipmentLog || [{
+        description: "", stationFrom: "", stationTo: "", equipmentTypeId: "",
+        machineryCode: "", unitId: "", executedAmount: "", workingHour: "",
+        idleHour: "", downHour: "", idleReason: "", downReason: "", remark: ""
+      }]);
+      setManpowerLog(parsed.manpowerLog || [{ jobTitleId: "", quantity: "", manHour: "" }]);
+    } else {
+      setLotSection("");
+      setActivityId("");
+      setCrewNo("");
+      setCrewLeader("");
+    }
+
+    // Map materialUsage back to consumedMaterials list
+    const projectMaterials = projects.find((p) => p.id === report.projectId)?.materials || [];
+    const mapped = report.materialUsage.map((u: any) => {
+      const match = projectMaterials.find((pm: any) => pm.material.name === u.materialName);
+      return {
+        id: match?.material.id || u.id,
+        name: u.materialName,
+        quantity: u.quantityUsed
+      };
+    });
+    setConsumedMaterials(mapped);
+
+    setEditingReportId(report.id);
+    setIsSubmitOpen(true);
+    setCurrentStep(1);
   };
 
   // Helper parser for custom QC layout
@@ -595,6 +661,11 @@ export default function ReportsDashboard({
                   </h3>
                   <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginTop: "4px" }}>
                     Submitted by {report.submitter.firstName} {report.submitter.lastName}
+                    {report.lastEditedBy && (
+                      <span style={{ marginLeft: "8px", fontStyle: "italic", color: "var(--accent)" }}>
+                        (Edited by {report.lastEditedBy} [{report.lastEditedRole?.replace(/_/g, " ") || ""}] on {report.lastEditedAt ? new Date(report.lastEditedAt).toLocaleDateString() : ""})
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div>
@@ -609,11 +680,22 @@ export default function ReportsDashboard({
                       </span>
                       {currentUser.role === "PROJECT_MANAGER" && (
                         <button
+                          type="button"
                           onClick={() => handleApproveReport(report.id)}
                           className="btn btn-primary"
                           style={{ padding: "6px 12px", fontSize: "11px", backgroundColor: "var(--success)", border: "none" }}
                         >
                           Approve Report
+                        </button>
+                      )}
+                      {(currentUser.id === report.submitterId || currentUser.role === "PROJECT_MANAGER" || currentUser.role === "SYSTEM_ADMIN") && (
+                        <button
+                          type="button"
+                          onClick={() => handleStartEdit(report)}
+                          className="btn btn-secondary"
+                          style={{ padding: "6px 12px", fontSize: "11px" }}
+                        >
+                          ✏️ Edit Log
                         </button>
                       )}
                     </div>
@@ -667,10 +749,10 @@ export default function ReportsDashboard({
             {/* Modal Header */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
               <div>
-                <h4 style={{ fontSize: "18px", fontWeight: 700 }}>Log Daily QC Site Report</h4>
+                <h4 style={{ fontSize: "18px", fontWeight: 700 }}>{editingReportId ? "✏️ Edit Daily QC Site Report" : "Log Daily QC Site Report"}</h4>
                 {autosaveStatus && <span style={{ fontSize: "11px", color: "var(--accent)" }}>{autosaveStatus}</span>}
               </div>
-              <button style={{ background: "none", border: "none", fontSize: "20px", cursor: "pointer", color: "var(--text-secondary)" }} onClick={() => setIsSubmitOpen(false)}>&times;</button>
+              <button type="button" style={{ background: "none", border: "none", fontSize: "20px", cursor: "pointer", color: "var(--text-secondary)" }} onClick={() => { setIsSubmitOpen(false); setEditingReportId(null); }}>&times;</button>
             </div>
 
             {/* Wizard Steps indicator */}

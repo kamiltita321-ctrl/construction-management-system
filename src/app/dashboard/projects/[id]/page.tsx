@@ -175,7 +175,11 @@ export default async function ProjectDetailPage({
     isApproved: r.isApproved,
     approvedBy: r.approvedBy,
     project: r.project,
+    submitterId: r.submitterId,
     submitter: r.submitter,
+    lastEditedBy: r.lastEditedBy,
+    lastEditedRole: r.lastEditedRole,
+    lastEditedAt: r.lastEditedAt ? r.lastEditedAt.toISOString() : null,
     materialUsage: r.materialUsage.map((u) => ({
       id: u.id,
       materialName: u.materialName,

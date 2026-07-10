@@ -137,7 +137,11 @@ export default async function ReportsPage() {
     dailyCost: (r as any).dailyCost ?? null,
     dailyProfit: (r as any).dailyProfit ?? null,
     project: r.project,
+    submitterId: r.submitterId,
     submitter: r.submitter,
+    lastEditedBy: r.lastEditedBy,
+    lastEditedRole: r.lastEditedRole,
+    lastEditedAt: r.lastEditedAt ? r.lastEditedAt.toISOString() : null,
     materialUsage: r.materialUsage.map((u) => ({
       id: u.id,
       materialName: u.materialName,
