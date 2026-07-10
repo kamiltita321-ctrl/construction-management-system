@@ -4,6 +4,7 @@ import { Role } from "@prisma/client";
 import ReportsDashboard from "./ReportsDashboard";
 import SummaryDashboard from "./SummaryDashboard";
 import ReportsTabsLayout from "./ReportsTabsLayout";
+import FinancialDashboard from "./FinancialDashboard";
 
 export default async function ReportsPage() {
   const session = await requireAuth();
@@ -133,6 +134,8 @@ export default async function ReportsPage() {
     weather: r.weather,
     isApproved: r.isApproved,
     approvedBy: r.approvedBy,
+    dailyCost: (r as any).dailyCost ?? null,
+    dailyProfit: (r as any).dailyProfit ?? null,
     project: r.project,
     submitter: r.submitter,
     materialUsage: r.materialUsage.map((u) => ({
@@ -192,10 +195,18 @@ export default async function ReportsPage() {
     />
   );
 
+  const financialDashboard = role !== Role.OFFICE_ENGINEER ? (
+    <FinancialDashboard
+      reports={serializedReports.map((r) => ({ reportDate: r.reportDate, dailyCost: r.dailyCost, dailyProfit: r.dailyProfit, project: r.project }))}
+      role={role}
+    />
+  ) : null;
+
   return (
     <ReportsTabsLayout
       reportsDashboard={reportsDashboard}
       summaryDashboard={summaryDashboard}
+      financialDashboard={financialDashboard}
       isSiteEngineer={role === Role.OFFICE_ENGINEER}
     />
   );

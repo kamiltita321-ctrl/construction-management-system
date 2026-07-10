@@ -142,6 +142,10 @@ export default function ReportsDashboard({
 
   const [isLoading, setIsLoading] = useState(false);
 
+  // Office Engineer — cost & profit encoding (spec §4)
+  const [dailyCost, setDailyCost] = useState("");
+  const [dailyProfit, setDailyProfit] = useState("");
+
   // Autosave status
   const [autosaveStatus, setAutosaveStatus] = useState("");
 
@@ -362,6 +366,8 @@ export default function ReportsDashboard({
           issuesFaced: issuesFaced || null,
           weather: weather || null,
           materials: consumedMaterials.map((m) => ({ materialId: m.id, quantityUsed: m.quantity })),
+          ...(currentUser.role === "OFFICE_ENGINEER" && dailyCost ? { dailyCost: parseFloat(dailyCost) } : {}),
+          ...(currentUser.role === "OFFICE_ENGINEER" && dailyProfit ? { dailyProfit: parseFloat(dailyProfit) } : {}),
         }),
       });
 
@@ -908,6 +914,48 @@ export default function ReportsDashboard({
                     <label style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "4px" }}>Issues Faced</label>
                     <textarea placeholder="e.g. weather delays, machinery breakdown..." rows={3} style={{ width: "100%", padding: "10px", background: "var(--bg-base)", border: "1px solid var(--border)", color: "var(--text-primary)", fontFamily: "inherit" }} value={issuesFaced} onChange={(e) => setIssuesFaced(e.target.value)} />
                   </div>
+
+                  {/* Office Engineer cost & profit encoding */}
+                  {currentUser.role === "OFFICE_ENGINEER" && (
+                    <div style={{ marginTop: "8px", padding: "20px", borderRadius: "var(--radius-sm)", border: "2px solid var(--accent)", background: "rgba(99,102,241,0.05)" }}>
+                      <div style={{ fontSize: "13px", fontWeight: 700, color: "var(--accent)", marginBottom: "14px" }}>💰 Daily Cost & Profit Encoding <span style={{ fontSize: "10px", opacity: 0.7 }}>(Office Engineer only)</span></div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px" }}>
+                        <div>
+                          <label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Daily Cost (₱)</label>
+                          <input
+                            type="number"
+                            step="any"
+                            min="0"
+                            placeholder="0.00"
+                            style={{ width: "100%", padding: "8px", background: "var(--bg-base)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
+                            value={dailyCost}
+                            onChange={(e) => setDailyCost(e.target.value)}
+                          />
+                          <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: "3px" }}>Total cost incurred today</div>
+                        </div>
+                        <div>
+                          <label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Profit / Revenue (₱)</label>
+                          <input
+                            type="number"
+                            step="any"
+                            min="0"
+                            placeholder="0.00"
+                            style={{ width: "100%", padding: "8px", background: "var(--bg-base)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
+                            value={dailyProfit}
+                            onChange={(e) => setDailyProfit(e.target.value)}
+                          />
+                          <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: "3px" }}>Earned revenue / billing today</div>
+                        </div>
+                        <div style={{ padding: "12px", background: "var(--bg-base)", borderRadius: "var(--radius-sm)", border: `1px solid ${ (parseFloat(dailyProfit) || 0) - (parseFloat(dailyCost) || 0) >= 0 ? "var(--success)" : "var(--error)" }` }}>
+                          <div style={{ fontSize: "10px", color: "var(--text-muted)", textTransform: "uppercase", marginBottom: "4px" }}>Net P&L</div>
+                          <div style={{ fontSize: "20px", fontWeight: 800, color: (parseFloat(dailyProfit) || 0) - (parseFloat(dailyCost) || 0) >= 0 ? "var(--success)" : "var(--error)" }}>
+                            {((parseFloat(dailyProfit) || 0) - (parseFloat(dailyCost) || 0)).toLocaleString("en-US", { style: "currency", currency: "PHP", maximumFractionDigits: 0 })}
+                          </div>
+                          <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: "2px" }}>{(parseFloat(dailyProfit) || 0) - (parseFloat(dailyCost) || 0) >= 0 ? "✅ Profitable" : "🔴 In the red"}</div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
