@@ -57,18 +57,11 @@ export async function PUT(
       return NextResponse.json({ report: updatedReport });
     }
 
-    // Handle Edit/Update Flow
-    // Allowed to edit: original submitter, assigned PM, or Executives
     const isAuthorizedSubmitter = report.submitterId === userId;
-    const isAuthorizedPM = role === Role.PROJECT_MANAGER && report.project.managerId === userId;
-    const isAuthorizedExec =
-      role === Role.SYSTEM_ADMIN ||
-      role === Role.GENERAL_MANAGER ||
-      role === Role.DEPUTY_GENERAL_MANAGER ||
-      role === Role.VP_OF_CONSTRUCTION;
+    const isOfficeEngineer = role === Role.OFFICE_ENGINEER;
 
-    if (!isAuthorizedSubmitter && !isAuthorizedPM && !isAuthorizedExec) {
-      return NextResponse.json({ error: "Access denied to edit this report." }, { status: 403 });
+    if (!isAuthorizedSubmitter || !isOfficeEngineer) {
+      return NextResponse.json({ error: "Access denied to edit this report. Only the original Office Engineer who submitted this report can edit it." }, { status: 403 });
     }
 
     if (!workCompleted) {

@@ -684,7 +684,7 @@ export default function ReportsDashboard({
                           Approve Report
                         </button>
                       )}
-                      {(currentUser.id === report.submitterId || currentUser.role === "PROJECT_MANAGER" || currentUser.role === "SYSTEM_ADMIN") && (
+                      {currentUser.role === "OFFICE_ENGINEER" && currentUser.id === report.submitterId && (
                         <button
                           type="button"
                           onClick={() => handleStartEdit(report)}
