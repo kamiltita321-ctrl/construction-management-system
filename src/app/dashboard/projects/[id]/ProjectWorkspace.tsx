@@ -64,9 +64,11 @@ interface Task {
   status: string;
   type: string;
   progress: number;
+  workflowStage: string;
   projectId: string;
   assigneeId: string | null;
   assignee: { firstName: string; lastName: string } | null;
+  creator?: { firstName: string; lastName: string; role: string } | null;
 }
 
 interface ChangeOrder {
@@ -75,9 +77,11 @@ interface ChangeOrder {
   description: string;
   estimatedCost: number;
   status: string;
+  workflowStage: string;
   rejectionReason: string | null;
+  requestLetterUrl: string | null;
   projectId: string;
-  requester: { firstName: string; lastName: string };
+  requester: { firstName: string; lastName: string; role?: string };
   approver: { firstName: string; lastName: string } | null;
 }
 
@@ -143,6 +147,14 @@ export default function ProjectWorkspace({
   const [coTitle, setCoTitle] = useState("");
   const [coDesc, setCoDesc] = useState("");
   const [coCost, setCoCost] = useState("");
+  const [taskFormError, setTaskFormError] = useState("");
+  const [coFormError, setCoFormError] = useState("");
+
+  // Team management state (for exec roles)
+  const [allUsers, setAllUsers] = useState<Array<{ id: string; firstName: string; lastName: string; email: string; role: string; isAssigned: boolean }>>([]);
+  const [teamLoading, setTeamLoading] = useState(false);
+  const [teamSearch, setTeamSearch] = useState("");
+  const [localEngineers, setLocalEngineers] = useState<Array<{ id: string; firstName: string; lastName: string; email: string; role: string }>>(project.engineers);
 
   // Note form fields
   const [noteTitle, setNoteTitle] = useState("");
@@ -166,6 +178,7 @@ export default function ProjectWorkspace({
 
   const isOE = currentUser.role === "OFFICE_ENGINEER";
   const isCE = currentUser.role === "CONSTRUCTION_ENGINEER";
+  const isSE = currentUser.role === "SITE_ENGINEER";
   const isPM = currentUser.role === "PROJECT_MANAGER";
   const isHeadOffice =
     currentUser.role === "SYSTEM_ADMIN" ||
@@ -174,14 +187,14 @@ export default function ProjectWorkspace({
     currentUser.role === "VP_OF_CONSTRUCTION";
   const isTopRole = isHeadOffice || isPM; // Can see Schedule, edit project
 
-  // Work Orders: CE initiates/QCs, PM approves, Head Office oversees
+  // Work Orders: CE initiates, SE executes, CE final QC, PM approves, Consultant reviews
   const canModifyTasks = isHeadOffice || isPM || isCE;
 
-  // Change orders approved by Head Office only
-  const canApproveCO = isHeadOffice;
+  // Change orders: Head Office & PM can approve at their pipeline stage
+  const canApproveCO = isHeadOffice || isPM;
 
-  // Change orders requested by Head Office or PM
-  const canRequestCO = isHeadOffice || isPM;
+  // Change orders initiated by CE (or PM/Head Office)
+  const canRequestCO = isHeadOffice || isPM || isCE;
 
   // Visitors & Inspections states
   interface Visitor {
@@ -372,9 +385,10 @@ export default function ProjectWorkspace({
     }
   };
 
-  const handleCreateTask = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!taskTitle || !taskDueDate) return;
+  const handleCreateTask = async () => {
+    setTaskFormError("");
+    if (!taskTitle.trim()) { setTaskFormError("Task title is required."); return; }
+    if (!taskDueDate) { setTaskFormError("Due date is required."); return; }
     setIsLoading(true);
 
     try {
@@ -382,7 +396,7 @@ export default function ProjectWorkspace({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title: taskTitle,
+          title: taskTitle.trim(),
           description: taskDesc,
           dueDate: taskDueDate,
           projectId: project.id,
@@ -392,25 +406,31 @@ export default function ProjectWorkspace({
 
       const data = await res.json();
       if (res.ok) {
-        setTasks([...tasks, data.task]);
+        setTasks(prev => [data.task, ...prev]);
         setTaskTitle("");
         setTaskDesc("");
         setTaskDueDate("");
         setTaskAssigneeId("");
+        setTaskFormError("");
         setIsTaskModalOpen(false);
         router.refresh();
+      } else {
+        setTaskFormError(data.error || "Failed to create work order.");
       }
     } catch (e) {
       console.error(e);
+      setTaskFormError("Network error. Please check your connection.");
     } finally {
       setIsLoading(false);
     }
   };
 
   // Change Orders handlers
-  const handleCreateChangeOrder = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!coTitle || !coDesc || !coCost) return;
+  const handleCreateChangeOrder = async () => {
+    setCoFormError("");
+    if (!coTitle.trim()) { setCoFormError("Title is required."); return; }
+    if (!coDesc.trim()) { setCoFormError("Description is required."); return; }
+    if (!coCost || isNaN(parseFloat(coCost))) { setCoFormError("Valid estimated cost is required."); return; }
     setIsLoading(true);
 
     try {
@@ -418,8 +438,8 @@ export default function ProjectWorkspace({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title: coTitle,
-          description: coDesc,
+          title: coTitle.trim(),
+          description: coDesc.trim(),
           estimatedCost: parseFloat(coCost),
           projectId: project.id,
         }),
@@ -427,15 +447,19 @@ export default function ProjectWorkspace({
 
       const data = await res.json();
       if (res.ok) {
-        setChangeOrders([data.changeOrder, ...changeOrders]);
+        setChangeOrders(prev => [data.changeOrder, ...prev]);
         setCoTitle("");
         setCoDesc("");
         setCoCost("");
+        setCoFormError("");
         setIsCOModalOpen(false);
         router.refresh();
+      } else {
+        setCoFormError(data.error || "Failed to create change order.");
       }
     } catch (e) {
       console.error(e);
+      setCoFormError("Network error. Please check your connection.");
     } finally {
       setIsLoading(false);
     }
@@ -691,20 +715,130 @@ export default function ProjectWorkspace({
 
         {/* TEAM — Head Office only */}
         {isHeadOffice && activeTab === "crew" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-            <h4 style={{ fontSize: "16px", fontWeight: 700 }}>Project Team</h4>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "16px" }}>
-              {[project.manager, ...project.engineers].map(member => (
-                <div key={member.id} className="glass-panel" style={{ padding: "20px", display: "flex", alignItems: "center", gap: "16px" }}>
-                  <div style={{ width: 48, height: 48, borderRadius: "50%", background: "var(--accent)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "18px", flexShrink: 0 }}>{member.firstName[0]}</div>
-                  <div>
-                    <div style={{ fontSize: "14px", fontWeight: 700 }}>{member.firstName} {member.lastName}</div>
-                    <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginTop: "2px" }}>{member.role.replace(/_/g, " ")}</div>
-                    <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "4px" }}>{member.email}</div>
-                  </div>
-                </div>
-              ))}
+          <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <h4 style={{ fontSize: "16px", fontWeight: 700 }}>Project Team</h4>
+                <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginTop: "4px" }}>Assign or remove engineers and field roles from this project.</p>
+              </div>
             </div>
+
+            {/* Current team */}
+            <section className="glass-panel" style={{ padding: "20px" }}>
+              <h5 style={{ fontSize: "13px", fontWeight: 700, marginBottom: "14px", color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Current Team ({localEngineers.length + 1})</h5>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "12px" }}>
+                {/* Manager — can't be removed here */}
+                <div style={{ padding: "14px 18px", display: "flex", alignItems: "center", gap: "14px", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", background: "var(--bg-base)" }}>
+                  <div style={{ width: 40, height: 40, borderRadius: "50%", background: "#8b5cf6", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: "16px", color: "#fff", flexShrink: 0 }}>{project.manager.firstName[0]}</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: "13px", fontWeight: 700 }}>{project.manager.firstName} {project.manager.lastName}</div>
+                    <div style={{ fontSize: "11px", color: "#8b5cf6", marginTop: "2px" }}>Project Manager</div>
+                  </div>
+                  <span style={{ fontSize: "10px", padding: "2px 8px", borderRadius: "var(--radius-full)", background: "rgba(139,92,246,0.15)", color: "#8b5cf6", fontWeight: 700 }}>PM</span>
+                </div>
+
+                {localEngineers.map(member => (
+                  <div key={member.id} style={{ padding: "14px 18px", display: "flex", alignItems: "center", gap: "14px", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", background: "var(--bg-base)" }}>
+                    <div style={{ width: 40, height: 40, borderRadius: "50%", background: "var(--accent)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: "16px", color: "#fff", flexShrink: 0 }}>{member.firstName[0]}</div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: "13px", fontWeight: 700 }}>{member.firstName} {member.lastName}</div>
+                      <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "2px" }}>{member.role.replace(/_/g, " ")}</div>
+                      <div style={{ fontSize: "10px", color: "var(--text-muted)" }}>{member.email}</div>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        const res = await fetch(`/api/projects/${project.id}/team`, {
+                          method: "DELETE",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ userId: member.id }),
+                        });
+                        if (res.ok) {
+                          setLocalEngineers(prev => prev.filter(e => e.id !== member.id));
+                          setAllUsers(prev => prev.map(u => u.id === member.id ? { ...u, isAssigned: false } : u));
+                        } else {
+                          const d = await res.json();
+                          alert(d.error || "Failed to remove member.");
+                        }
+                      }}
+                      style={{ padding: "4px 10px", fontSize: "11px", borderRadius: "var(--radius-sm)", border: "1px solid var(--error)", color: "var(--error)", background: "none", cursor: "pointer", flexShrink: 0 }}
+                    >✕ Remove</button>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            {/* Add member panel */}
+            <section className="glass-panel" style={{ padding: "20px" }}>
+              <h5 style={{ fontSize: "13px", fontWeight: 700, marginBottom: "14px", color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Add Team Member</h5>
+              <div style={{ display: "flex", gap: "10px", marginBottom: "16px" }}>
+                <input
+                  type="text"
+                  placeholder="Search by name, email, or role..."
+                  value={teamSearch}
+                  onChange={e => setTeamSearch(e.target.value)}
+                  style={{ flex: 1, padding: "8px 12px", fontSize: "13px" }}
+                />
+                <button
+                  onClick={async () => {
+                    if (allUsers.length > 0) return;
+                    setTeamLoading(true);
+                    const res = await fetch(`/api/projects/${project.id}/team`);
+                    if (res.ok) {
+                      const d = await res.json();
+                      setAllUsers(d.users);
+                    }
+                    setTeamLoading(false);
+                  }}
+                  className="btn btn-secondary"
+                  style={{ fontSize: "12px", padding: "8px 16px" }}
+                >
+                  {teamLoading ? "Loading..." : allUsers.length === 0 ? "Load Users" : "Refresh"}
+                </button>
+              </div>
+
+              {allUsers.length > 0 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "320px", overflowY: "auto" }}>
+                  {allUsers
+                    .filter(u => {
+                      const q = teamSearch.toLowerCase();
+                      return !q || `${u.firstName} ${u.lastName} ${u.email} ${u.role}`.toLowerCase().includes(q);
+                    })
+                    .filter(u => u.id !== project.manager.id)
+                    .map(u => (
+                      <div key={u.id} style={{ display: "flex", alignItems: "center", gap: "12px", padding: "10px 14px", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", background: "var(--bg-base)" }}>
+                        <div style={{ width: 32, height: 32, borderRadius: "50%", background: u.isAssigned ? "var(--success)" : "var(--border)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "13px", color: u.isAssigned ? "#fff" : "var(--text-muted)", flexShrink: 0 }}>{u.firstName[0]}</div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: "13px", fontWeight: 600 }}>{u.firstName} {u.lastName}</div>
+                          <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>{u.role.replace(/_/g, " ")} · {u.email}</div>
+                        </div>
+                        {u.isAssigned ? (
+                          <span style={{ fontSize: "11px", padding: "3px 10px", borderRadius: "var(--radius-full)", background: "rgba(34,197,94,0.15)", color: "var(--success)", fontWeight: 700 }}>✓ Assigned</span>
+                        ) : (
+                          <button
+                            onClick={async () => {
+                              const res = await fetch(`/api/projects/${project.id}/team`, {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ userId: u.id }),
+                              });
+                              if (res.ok) {
+                                const d = await res.json();
+                                setLocalEngineers(d.engineers);
+                                setAllUsers(prev => prev.map(x => x.id === u.id ? { ...x, isAssigned: true } : x));
+                              } else {
+                                const d = await res.json();
+                                alert(d.error || "Failed to add member.");
+                              }
+                            }}
+                            className="btn btn-primary"
+                            style={{ fontSize: "11px", padding: "4px 12px", backgroundColor: "var(--accent)", border: "none" }}
+                          >+ Add</button>
+                        )}
+                      </div>
+                    ))}
+                </div>
+              )}
+            </section>
           </div>
         )}
 
@@ -744,39 +878,141 @@ export default function ProjectWorkspace({
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div>
                     <h4 style={{ fontSize: "16px", fontWeight: 700 }}>Work Orders</h4>
-                    <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginTop: "4px" }}>Track and manage site work orders assigned to crew members.</p>
+                    <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginTop: "4px" }}>5-stage pipeline: CE → Site Engineer → CE QC → PM Approval → Consultant Review.</p>
                   </div>
-                  {canModifyTasks && <button onClick={() => setIsTaskModalOpen(true)} className="btn btn-primary" style={{ backgroundColor: "var(--accent)", border: "none" }}>+ New Work Order</button>}
+                  {(isCE || isHeadOffice || isPM) && <button onClick={() => setIsTaskModalOpen(true)} className="btn btn-primary" style={{ backgroundColor: "var(--accent)", border: "none" }}>+ New Work Order</button>}
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px" }}>
-                  {[{ id: "DRAFT", label: "📋 Draft" }, { id: "PENDING_APPROVAL", label: "⏳ Pending" }, { id: "APPROVED", label: "✅ Approved" }, { id: "IN_PROGRESS", label: "🚧 In Progress" }, { id: "COMPLETED", label: "🎉 Done" }].map(col => {
-                    const colTasks = tasks.filter(t => t.status === col.id);
-                    return (
-                      <div key={col.id} className="glass-panel" style={{ padding: "16px", minHeight: "280px", border: "1px solid var(--border)" }}>
-                        <div style={{ fontWeight: 700, fontSize: "12px", borderBottom: "2px solid var(--border)", paddingBottom: "8px", marginBottom: "12px", display: "flex", justifyContent: "space-between" }}>
-                          <span>{col.label}</span><span style={{ opacity: 0.6 }}>({colTasks.length})</span>
-                        </div>
-                        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                          {colTasks.map(task => (
-                            <div key={task.id} style={{ padding: "12px", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", background: "var(--bg-base)" }}>
-                              <h5 style={{ fontWeight: 700, fontSize: "13px" }}>{task.title}</h5>
-                              {task.description && <p style={{ fontSize: "11px", color: "var(--text-secondary)", marginTop: "4px" }}>{task.description}</p>}
-                              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", marginTop: "8px", color: "var(--text-muted)" }}>
-                                <span>📅 {task.dueDate}</span><span>👤 {task.assignee ? task.assignee.firstName : "Unassigned"}</span>
+
+                {/* Pipeline stages legend */}
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", fontSize: "10px" }}>
+                  {[
+                    { stage: "INITIATED", label: "Initiated", color: "#6366f1" },
+                    { stage: "SE_EXECUTION", label: "SE Executing", color: "#f59e0b" },
+                    { stage: "CE_QC_REVIEW", label: "CE QC Review", color: "#3b82f6" },
+                    { stage: "PM_APPROVAL", label: "PM Approval", color: "#8b5cf6" },
+                    { stage: "CONSULTANT_REVIEW", label: "Consultant", color: "#14b8a6" },
+                    { stage: "COMPLETED", label: "Completed", color: "#22c55e" },
+                  ].map(s => (
+                    <span key={s.stage} style={{ padding: "3px 10px", borderRadius: "var(--radius-full)", background: `${s.color}22`, color: s.color, fontWeight: 700, border: `1px solid ${s.color}44` }}>{s.label}</span>
+                  ))}
+                </div>
+
+                {tasks.length === 0 ? (
+                  <div className="glass-panel" style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)" }}><div style={{ fontSize: "36px", marginBottom: "8px" }}>🔧</div><p>No work orders yet. Construction Engineers can create them.</p></div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                    {tasks.map(task => {
+                      const stageColors: Record<string, { bg: string; color: string }> = {
+                        INITIATED:         { bg: "#6366f122", color: "#6366f1" },
+                        SE_EXECUTION:      { bg: "#f59e0b22", color: "#f59e0b" },
+                        CE_QC_REVIEW:      { bg: "#3b82f622", color: "#3b82f6" },
+                        PM_APPROVAL:       { bg: "#8b5cf622", color: "#8b5cf6" },
+                        CONSULTANT_REVIEW: { bg: "#14b8a622", color: "#14b8a6" },
+                        COMPLETED:         { bg: "#22c55e22", color: "#22c55e" },
+                      };
+                      const stageLabels: Record<string, string> = {
+                        INITIATED: "Initiated", SE_EXECUTION: "SE Executing", CE_QC_REVIEW: "CE QC", PM_APPROVAL: "PM Approval", CONSULTANT_REVIEW: "Consultant", COMPLETED: "Completed",
+                      };
+                      const sc = stageColors[task.workflowStage] || { bg: "var(--bg-base)", color: "var(--text-secondary)" };
+
+                      const doAction = async (action: string) => {
+                        const res = await fetch(`/api/tasks/${task.id}`, {
+                          method: "PUT",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ action }),
+                        });
+                        const data = await res.json();
+                        if (res.ok) {
+                          setTasks(tasks.map(t => t.id === task.id ? { ...t, ...data.task } : t));
+                        } else {
+                          alert(data.error || "Action failed.");
+                        }
+                      };
+
+                      return (
+                        <div key={task.id} className="glass-panel" style={{ padding: "16px", border: `1px solid ${sc.color}44` }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px" }}>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+                                <span style={{ padding: "2px 10px", fontSize: "10px", fontWeight: 700, borderRadius: "var(--radius-full)", backgroundColor: sc.bg, color: sc.color }}>
+                                  {stageLabels[task.workflowStage] || task.workflowStage}
+                                </span>
+                                <h5 style={{ fontWeight: 700, fontSize: "14px" }}>{task.title}</h5>
                               </div>
-                              {(!isOE || task.assigneeId === currentUser.id) && (
-                                <div style={{ display: "flex", gap: "4px", marginTop: "8px", borderTop: "1px solid var(--border)", paddingTop: "8px" }}>
-                                  {task.status !== "DRAFT" && <button onClick={() => { const s = ["DRAFT","PENDING_APPROVAL","APPROVED","IN_PROGRESS","COMPLETED"]; const i = s.indexOf(task.status); if (i > 0) handleTaskStatusChange(task.id, s[i-1], task.progress); }} style={{ flex: 1, padding: "2px", fontSize: "9px" }} className="btn btn-secondary">◀</button>}
-                                  {task.status !== "COMPLETED" && <button onClick={() => { const s = ["DRAFT","PENDING_APPROVAL","APPROVED","IN_PROGRESS","COMPLETED"]; const i = s.indexOf(task.status); if (i < s.length-1) handleTaskStatusChange(task.id, s[i+1], task.progress); }} style={{ flex: 1, padding: "2px", fontSize: "9px" }} className="btn btn-secondary">▶</button>}
+                              {task.description && <p style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: "8px" }}>{task.description}</p>}
+                              <div style={{ display: "flex", gap: "16px", fontSize: "11px", color: "var(--text-muted)" }}>
+                                <span>📅 Due: {new Date(task.dueDate).toLocaleDateString()}</span>
+                                <span>👤 {task.assignee ? `${task.assignee.firstName} ${task.assignee.lastName}` : "Unassigned"}</span>
+                                {task.creator && <span>✍️ {task.creator.firstName} {task.creator.lastName}</span>}
+                              </div>
+                              {/* Progress bar */}
+                              <div style={{ marginTop: "10px" }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", color: "var(--text-muted)", marginBottom: "4px" }}>
+                                  <span>Progress</span><span>{task.progress}%</span>
                                 </div>
+                                <div style={{ height: "5px", backgroundColor: "var(--border)", borderRadius: "var(--radius-full)", overflow: "hidden" }}>
+                                  <div style={{ height: "100%", width: `${task.progress}%`, backgroundColor: task.progress >= 100 ? "var(--success)" : "var(--accent)", transition: "width 0.3s ease" }} />
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Pipeline action buttons */}
+                            <div style={{ display: "flex", flexDirection: "column", gap: "6px", minWidth: "160px" }}>
+                              {(isCE || isHeadOffice) && task.workflowStage === "INITIATED" && (
+                                <button onClick={() => doAction("submit_to_se")} className="btn btn-primary" style={{ fontSize: "11px", padding: "5px 10px", backgroundColor: "var(--accent)", border: "none" }}>
+                                  📤 Submit to Site Engineer
+                                </button>
+                              )}
+                              {(isCE || isHeadOffice) && task.workflowStage === "CE_QC_REVIEW" && (
+                                <>
+                                  <button onClick={() => doAction("ce_approve_to_pm")} className="btn btn-primary" style={{ fontSize: "11px", padding: "5px 10px", backgroundColor: "#22c55e", border: "none" }}>
+                                    ✅ Submit to PM
+                                  </button>
+                                  <button onClick={() => doAction("ce_return_to_se")} className="btn btn-secondary" style={{ fontSize: "11px", padding: "5px 10px" }}>
+                                    ↩ Return to SE
+                                  </button>
+                                </>
+                              )}
+                              {(isSE || isHeadOffice) && task.workflowStage === "SE_EXECUTION" && (
+                                <>
+                                  <button onClick={() => doAction("se_submit_to_ce")} className="btn btn-primary" style={{ fontSize: "11px", padding: "5px 10px", backgroundColor: "#3b82f6", border: "none" }}>
+                                    📤 Submit to CE QC
+                                  </button>
+                                  <button onClick={() => doAction("se_return_to_ce")} className="btn btn-secondary" style={{ fontSize: "11px", padding: "5px 10px" }}>
+                                    ↩ Return to CE
+                                  </button>
+                                </>
+                              )}
+                              {(isPM || isHeadOffice) && task.workflowStage === "PM_APPROVAL" && (
+                                <>
+                                  <button onClick={() => doAction("pm_approve")} className="btn btn-primary" style={{ fontSize: "11px", padding: "5px 10px", backgroundColor: "#22c55e", border: "none" }}>
+                                    ✅ Approve → Consultant
+                                  </button>
+                                  <button onClick={() => doAction("pm_return")} className="btn btn-secondary" style={{ fontSize: "11px", padding: "5px 10px" }}>
+                                    ↩ Return for Correction
+                                  </button>
+                                  <button onClick={() => doAction("pm_reject")} className="btn btn-secondary" style={{ fontSize: "11px", padding: "5px 10px", borderColor: "var(--error)", color: "var(--error)" }}>
+                                    ✖ Reject
+                                  </button>
+                                </>
+                              )}
+                              {(isHeadOffice || isPM) && task.workflowStage === "CONSULTANT_REVIEW" && (
+                                <>
+                                  <button onClick={() => doAction("consultant_accept")} className="btn btn-primary" style={{ fontSize: "11px", padding: "5px 10px", backgroundColor: "#14b8a6", border: "none" }}>
+                                    🎉 Accept & Complete
+                                  </button>
+                                  <button onClick={() => doAction("consultant_reject")} className="btn btn-secondary" style={{ fontSize: "11px", padding: "5px 10px", borderColor: "var(--error)", color: "var(--error)" }}>
+                                    ✖ Reject → PM
+                                  </button>
+                                </>
                               )}
                             </div>
-                          ))}
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
 
@@ -786,35 +1022,188 @@ export default function ProjectWorkspace({
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div>
                     <h4 style={{ fontSize: "16px", fontWeight: 700 }}>Change Orders</h4>
-                    <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginTop: "4px" }}>Requests for deviations from the approved scope, budget, or schedule.</p>
+                    <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginTop: "4px" }}>5-stage pipeline: CE → SE → CE QC → PM Approval → Consultant Review. Budget gate: 25% max.</p>
                   </div>
-                  {canRequestCO && <button onClick={() => setIsCOModalOpen(true)} className="btn btn-primary" style={{ backgroundColor: "var(--accent)", border: "none" }}>+ Request Change Order</button>}
+                  {canRequestCO && <button onClick={() => setIsCOModalOpen(true)} className="btn btn-primary" style={{ backgroundColor: "var(--accent)", border: "none" }}>+ New Change Order</button>}
                 </div>
-                {changeOrders.length === 0 ? (
+
+                 {changeOrders.length === 0 ? (
                   <div className="glass-panel" style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)" }}><div style={{ fontSize: "36px", marginBottom: "8px" }}>💸</div><p>No change orders yet.</p></div>
                 ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
                     {changeOrders.map(co => {
-                      const badgeStyle = getCOStatusBadgeStyle(co.status);
-                      return (
-                        <div key={co.id} className="glass-panel" style={{ padding: "16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                          <div>
-                            <h5 style={{ fontWeight: 700, fontSize: "14px" }}>{co.title}</h5>
-                            <p style={{ fontSize: "12px", color: "var(--text-secondary)", marginTop: "4px" }}>{co.description}</p>
-                            <div style={{ display: "flex", gap: "12px", fontSize: "11px", color: "var(--text-secondary)", marginTop: "8px" }}>
-                              <span>Cost: <strong style={{ color: "var(--accent)" }}>{formatCurrency(co.estimatedCost)}</strong></span>
-                              <span>By: {co.requester.firstName} {co.requester.lastName}</span>
-                            </div>
-                            {co.rejectionReason && <div style={{ fontSize: "11px", color: "var(--error)", borderLeft: "3px solid var(--error)", padding: "4px 8px", marginTop: "8px" }}>Rejected: {co.rejectionReason}</div>}
+                      const coStageColors: Record<string, { bg: string; color: string }> = {
+                        INITIATED:         { bg: "#6366f122", color: "#6366f1" },
+                        SE_EXECUTION:      { bg: "#f59e0b22", color: "#f59e0b" },
+                        CE_QC:             { bg: "#3b82f622", color: "#3b82f6" },
+                        PM_APPROVAL:       { bg: "#8b5cf622", color: "#8b5cf6" },
+                        CONSULTANT_REVIEW: { bg: "#14b8a622", color: "#14b8a6" },
+                        COMPLETED:         { bg: "#22c55e22", color: "#22c55e" },
+                      };
+                      const coStageLabels: Record<string, string> = {
+                        INITIATED: "Initiated", SE_EXECUTION: "SE Reviewing", CE_QC: "CE Final Check",
+                        PM_APPROVAL: "PM Approval", CONSULTANT_REVIEW: "Consultant", COMPLETED: "Completed",
+                      };
+                      const coSc = coStageColors[co.workflowStage] || { bg: "var(--bg-base)", color: "var(--text-secondary)" };
+
+                      const doCOAction = async (action: string, extra?: Record<string, any>) => {
+                        const res = await fetch(`/api/change-orders/${co.id}`, {
+                          method: "PUT",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ action, ...extra }),
+                        });
+                        const data = await res.json();
+                        if (res.ok) {
+                          setChangeOrders(changeOrders.map(c => c.id === co.id ? { ...c, ...data.changeOrder } : c));
+                        } else {
+                          alert(data.error || "Action failed.");
+                        }
+                      };
+
+                      const handleCOPrint = () => {
+                        const win = window.open("", "_blank");
+                        if (!win) return;
+                        const stageOrder = ["INITIATED","SE_EXECUTION","CE_QC","PM_APPROVAL","CONSULTANT_REVIEW","COMPLETED"];
+                        const stageIdx = stageOrder.indexOf(co.workflowStage);
+                        win.document.write(`<!DOCTYPE html><html><head>
+                          <title>Change Order — ${co.title}</title>
+                          <style>
+                            body{font-family:Arial,sans-serif;max-width:800px;margin:40px auto;color:#111}
+                            .hdr{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #111;padding-bottom:16px;margin-bottom:24px}
+                            .logo{font-size:22px;font-weight:900}
+                            table{width:100%;border-collapse:collapse;margin-top:16px}
+                            td{padding:8px 12px;border:1px solid #ccc;font-size:13px}
+                            td:first-child{font-weight:600;background:#f5f5f5;width:180px}
+                            .sec{margin-top:24px}.sec-t{font-weight:700;font-size:14px;border-bottom:1px solid #ccc;padding-bottom:6px;margin-bottom:12px}
+                            .wf{display:flex;gap:6px;flex-wrap:wrap}
+                            .wf-s{padding:5px 12px;border-radius:4px;font-size:11px;font-weight:600}
+                            .sig{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;margin-top:40px}
+                            .sig-b{border-top:1px solid #111;padding-top:8px;font-size:12px}
+                            @media print{body{margin:20px}}
+                          </style></head><body>
+                          <div class="hdr">
+                            <div class="logo">🏗️ Construction Management System</div>
+                            <div style="text-align:right;font-size:11px;color:#666">CO-${co.id.slice(-8).toUpperCase()}<br/>Printed: ${new Date().toLocaleString()}</div>
                           </div>
-                          <div style={{ display: "flex", flexDirection: "column", gap: "8px", alignItems: "flex-end" }}>
-                            <span style={{ padding: "4px 10px", fontSize: "10px", fontWeight: 700, borderRadius: "var(--radius-full)", ...badgeStyle }}>{co.status.replace(/_/g, " ")}</span>
-                            {canApproveCO && co.status === "PENDING_APPROVAL" && (
-                              <div style={{ display: "flex", gap: "8px" }}>
-                                <button onClick={() => { setActiveCoId(co.id); setCoRejectionModalOpen(true); }} className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: "11px", borderColor: "var(--error)", color: "var(--error)" }}>Reject</button>
-                                <button onClick={() => handleApproveCO(co.id)} className="btn btn-primary" style={{ padding: "4px 10px", fontSize: "11px", backgroundColor: "var(--success)", border: "none" }}>Approve</button>
+                          <h2 style="margin:0 0 8px">${co.title}</h2>
+                          <table>
+                            <tr><td>Project</td><td>${project.name} (${project.code})</td></tr>
+                            <tr><td>Requester</td><td>${co.requester.firstName} ${co.requester.lastName}${co.requester.role ? " · " + co.requester.role.replace(/_/g," ") : ""}</td></tr>
+                            <tr><td>Estimated Cost</td><td><strong>$${co.estimatedCost.toLocaleString()}</strong></td></tr>
+                            <tr><td>Pipeline Stage</td><td>${coStageLabels[co.workflowStage] || co.workflowStage}</td></tr>
+                            <tr><td>Status</td><td>${co.status.replace(/_/g," ")}</td></tr>
+                            <tr><td>Consultant Letter</td><td>${co.requestLetterUrl ? co.requestLetterUrl : "<em>Not attached</em>"}</td></tr>
+                            ${co.rejectionReason ? `<tr><td>Rejection/Comment</td><td style="color:red">${co.rejectionReason}</td></tr>` : ""}
+                          </table>
+                          <div class="sec"><div class="sec-t">Description</div><p style="font-size:13px;line-height:1.6">${co.description}</p></div>
+                          <div class="sec"><div class="sec-t">Workflow Progress</div><div class="wf">
+                            ${stageOrder.map((s,i)=>`<div class="wf-s" style="background:${i<=stageIdx?"#d1fae5":"#f0f0f0"};color:${i<=stageIdx?"#065f46":"#666"}">${i+1}. ${({"INITIATED":"Initiated","SE_EXECUTION":"SE Review","CE_QC":"CE QC","PM_APPROVAL":"PM Approval","CONSULTANT_REVIEW":"Consultant","COMPLETED":"Completed"} as Record<string,string>)[s]}</div>`).join("")}
+                          </div></div>
+                          <div class="sig">
+                            <div class="sig-b">Construction Engineer<br/><br/>______________________<br/><small>Name &amp; Date</small></div>
+                            <div class="sig-b">Project Manager<br/><br/>______________________<br/><small>Name &amp; Date</small></div>
+                            <div class="sig-b">Consultant<br/><br/>______________________<br/><small>Name &amp; Date</small></div>
+                          </div></body></html>`);
+                        win.document.close();
+                        win.print();
+                      };
+
+                      return (
+                        <div key={co.id} className="glass-panel" style={{ padding: "18px", border: `1px solid ${coSc.color}44` }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "16px" }}>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+                                <span style={{ padding: "2px 10px", fontSize: "10px", fontWeight: 700, borderRadius: "var(--radius-full)", backgroundColor: coSc.bg, color: coSc.color }}>
+                                  {coStageLabels[co.workflowStage] || co.workflowStage}
+                                </span>
+                                <h5 style={{ fontWeight: 700, fontSize: "14px" }}>{co.title}</h5>
                               </div>
-                            )}
+                              <p style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: "8px" }}>{co.description}</p>
+                              <div style={{ display: "flex", gap: "16px", fontSize: "11px", color: "var(--text-muted)", flexWrap: "wrap" }}>
+                                <span>💰 {formatCurrency(co.estimatedCost)}</span>
+                                <span>✍️ {co.requester.firstName} {co.requester.lastName}</span>
+                                {co.requestLetterUrl
+                                  ? <span style={{ color: "var(--success)" }}>📎 Letter attached</span>
+                                  : <span style={{ color: "var(--warning)" }}>⚠️ No consultant letter</span>}
+                              </div>
+                              {co.rejectionReason && (
+                                <div style={{ fontSize: "11px", color: "var(--error)", borderLeft: "3px solid var(--error)", padding: "4px 8px", marginTop: "8px" }}>
+                                  Returned: {co.rejectionReason}
+                                </div>
+                              )}
+                              {/* Consultant letter upload for PM at PM_APPROVAL stage */}
+                              {isPM && co.workflowStage === "PM_APPROVAL" && !co.requestLetterUrl && (
+                                <div style={{ marginTop: "10px", padding: "10px", background: "rgba(245,158,11,0.1)", border: "1px solid var(--warning)", borderRadius: "var(--radius-sm)" }}>
+                                  <div style={{ fontSize: "11px", fontWeight: 700, color: "var(--warning)", marginBottom: "6px" }}>⚠️ Attach consultant request letter before forwarding</div>
+                                  <div style={{ display: "flex", gap: "8px" }}>
+                                    <input type="text" placeholder="Enter letter URL or file reference..." style={{ flex: 1, padding: "6px 10px", fontSize: "12px" }} id={`co-letter-${co.id}`} />
+                                    <button onClick={async () => {
+                                      const input = document.getElementById(`co-letter-${co.id}`) as HTMLInputElement;
+                                      if (!input?.value) return;
+                                      await doCOAction("attach_letter", { requestLetterUrl: input.value });
+                                    }} className="btn btn-secondary" style={{ fontSize: "11px", padding: "6px 12px" }}>📎 Attach</button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Action buttons */}
+                            <div style={{ display: "flex", flexDirection: "column", gap: "6px", minWidth: "175px" }}>
+                              <button onClick={handleCOPrint} className="btn btn-secondary" style={{ fontSize: "11px", padding: "5px 10px" }}>🖨️ Print</button>
+
+                              {/* Executive fast-track: direct approve at any stage */}
+                              {isHeadOffice && co.workflowStage !== "COMPLETED" && (
+                                <button
+                                  onClick={async () => {
+                                    if (!confirm(`Direct-approve "${co.title}"? This bypasses the pipeline and marks it APPROVED immediately.`)) return;
+                                    const res = await fetch(`/api/change-orders/${co.id}`, {
+                                      method: "PUT",
+                                      headers: { "Content-Type": "application/json" },
+                                      body: JSON.stringify({ action: "executive_approve" }),
+                                    });
+                                    const data = await res.json();
+                                    if (res.ok) {
+                                      setChangeOrders(changeOrders.map(c => c.id === co.id ? { ...c, ...data.changeOrder } : c));
+                                    } else {
+                                      alert(data.error || "Failed to approve.");
+                                    }
+                                  }}
+                                  className="btn btn-primary"
+                                  style={{ fontSize: "11px", padding: "5px 10px", backgroundColor: "#22c55e", border: "none" }}
+                                >⚡ Direct Approve</button>
+                              )}
+
+                              {(isCE || isHeadOffice) && co.workflowStage === "INITIATED" && (
+                                <button onClick={() => doCOAction("submit_to_se")} className="btn btn-primary" style={{ fontSize: "11px", padding: "5px 10px", backgroundColor: "var(--accent)", border: "none" }}>
+                                  📤 Submit to SE
+                                </button>
+                              )}
+                              {(isSE || isHeadOffice) && co.workflowStage === "SE_EXECUTION" && (
+                                <>
+                                  <button onClick={() => doCOAction("se_submit_to_ce")} className="btn btn-primary" style={{ fontSize: "11px", padding: "5px 10px", backgroundColor: "#3b82f6", border: "none" }}>📤 Submit to CE</button>
+                                  <button onClick={() => doCOAction("se_return_to_ce")} className="btn btn-secondary" style={{ fontSize: "11px", padding: "5px 10px" }}>↩ Return to CE</button>
+                                </>
+                              )}
+                              {(isCE || isHeadOffice) && co.workflowStage === "CE_QC" && (
+                                <>
+                                  <button onClick={() => doCOAction("ce_approve_to_pm")} className="btn btn-primary" style={{ fontSize: "11px", padding: "5px 10px", backgroundColor: "#22c55e", border: "none" }}>✅ Submit to PM</button>
+                                  <button onClick={() => doCOAction("ce_return_to_se")} className="btn btn-secondary" style={{ fontSize: "11px", padding: "5px 10px" }}>↩ Return to SE</button>
+                                </>
+                              )}
+                              {(isPM || isHeadOffice) && co.workflowStage === "PM_APPROVAL" && (
+                                <>
+                                  <button onClick={() => doCOAction("pm_approve")} className="btn btn-primary" style={{ fontSize: "11px", padding: "5px 10px", backgroundColor: "#22c55e", border: "none" }}>✅ Approve → Consultant</button>
+                                  <button onClick={() => doCOAction("pm_return")} className="btn btn-secondary" style={{ fontSize: "11px", padding: "5px 10px" }}>↩ Return to CE</button>
+                                  <button onClick={() => { const r = prompt("Rejection reason:"); if (r !== null) doCOAction("pm_reject", { rejectionReason: r }); }} className="btn btn-secondary" style={{ fontSize: "11px", padding: "5px 10px", borderColor: "var(--error)", color: "var(--error)" }}>✖ Reject</button>
+                                </>
+                              )}
+                              {(isHeadOffice || isPM) && co.workflowStage === "CONSULTANT_REVIEW" && (
+                                <>
+                                  <button onClick={() => doCOAction("consultant_accept")} className="btn btn-primary" style={{ fontSize: "11px", padding: "5px 10px", backgroundColor: "#14b8a6", border: "none" }}>🎉 Accept & Complete</button>
+                                  <button onClick={() => { const r = prompt("Rejection reason:"); if (r !== null) doCOAction("consultant_reject", { rejectionReason: r }); }} className="btn btn-secondary" style={{ fontSize: "11px", padding: "5px 10px", borderColor: "var(--error)", color: "var(--error)" }}>✖ Reject → PM</button>
+                                </>
+                              )}
+                            </div>
                           </div>
                         </div>
                       );
@@ -1108,16 +1497,16 @@ export default function ProjectWorkspace({
 
 {/* Task Creation Modal */}
       {isTaskModalOpen && (
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: "24px" }}>
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "24px" }}>
           <div className="glass-panel" style={{ width: "100%", maxWidth: "480px", padding: "32px", margin: "auto", backgroundColor: "var(--bg-surface)", color: "var(--text-primary)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
               <h4 style={{ fontSize: "18px", fontWeight: 700 }}>Add Task / Work Order</h4>
-              <button style={{ background: "none", border: "none", fontSize: "20px", cursor: "pointer", color: "var(--text-secondary)" }} onClick={() => setIsTaskModalOpen(false)}>&times;</button>
+              <button style={{ background: "none", border: "none", fontSize: "20px", cursor: "pointer", color: "var(--text-secondary)" }} onClick={() => { setIsTaskModalOpen(false); setTaskFormError(""); }}>&times;</button>
             </div>
-            <form onSubmit={handleCreateTask} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
               <div>
                 <label style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "4px" }}>Task Title *</label>
-                <input type="text" required placeholder="Anchor bolt inspections..." style={{ width: "100%", padding: "8px" }} value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} />
+                <input type="text" placeholder="Anchor bolt inspections..." style={{ width: "100%", padding: "8px" }} value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} />
               </div>
               <div>
                 <label style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "4px" }}>Description</label>
@@ -1125,7 +1514,7 @@ export default function ProjectWorkspace({
               </div>
               <div>
                 <label style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "4px" }}>Due Date *</label>
-                <input type="date" required style={{ width: "100%", padding: "8px" }} value={taskDueDate} onChange={(e) => setTaskDueDate(e.target.value)} />
+                <input type="date" style={{ width: "100%", padding: "8px" }} value={taskDueDate} onChange={(e) => setTaskDueDate(e.target.value)} />
               </div>
               <div>
                 <label style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "4px" }}>Assignee</label>
@@ -1134,41 +1523,63 @@ export default function ProjectWorkspace({
                   {project.engineers.map((eng) => <option key={eng.id} value={eng.id}>{eng.firstName} {eng.lastName}</option>)}
                 </select>
               </div>
+              {taskFormError && (
+                <div style={{ padding: "10px 14px", borderRadius: "var(--radius-sm)", backgroundColor: "rgba(239,68,68,0.1)", border: "1px solid var(--error)", color: "var(--error)", fontSize: "13px", fontWeight: 600 }}>
+                  ⚠ {taskFormError}
+                </div>
+              )}
               <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "10px" }}>
-                <button type="button" className="btn btn-secondary" onClick={() => setIsTaskModalOpen(false)}>Cancel</button>
-                <button type="submit" className="btn btn-primary" style={{ backgroundColor: "var(--accent)", border: "none" }} disabled={isLoading}>{isLoading ? "Saving..." : "Save Work Order"}</button>
+                <button type="button" className="btn btn-secondary" onClick={() => { setIsTaskModalOpen(false); setTaskFormError(""); }}>Cancel</button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ backgroundColor: "var(--accent)", border: "none" }}
+                  disabled={isLoading}
+                  onClick={handleCreateTask}
+                >{isLoading ? "Saving..." : "Save Work Order"}</button>
               </div>
-            </form>
+            </div>
           </div>
         </div>
       )}
 
       {/* Change Order Creation Modal */}
       {isCOModalOpen && (
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: "24px" }}>
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "24px" }}>
           <div className="glass-panel" style={{ width: "100%", maxWidth: "480px", padding: "32px", margin: "auto", backgroundColor: "var(--bg-surface)", color: "var(--text-primary)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
               <h4 style={{ fontSize: "18px", fontWeight: 700 }}>Request Change Order</h4>
-              <button style={{ background: "none", border: "none", fontSize: "20px", cursor: "pointer", color: "var(--text-secondary)" }} onClick={() => setIsCOModalOpen(false)}>&times;</button>
+              <button style={{ background: "none", border: "none", fontSize: "20px", cursor: "pointer", color: "var(--text-secondary)" }} onClick={() => { setIsCOModalOpen(false); setCoFormError(""); }}>&times;</button>
             </div>
-            <form onSubmit={handleCreateChangeOrder} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
               <div>
                 <label style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "4px" }}>Change Title *</label>
-                <input type="text" required placeholder="Extra concrete layer for pier..." style={{ width: "100%", padding: "8px" }} value={coTitle} onChange={(e) => setCoTitle(e.target.value)} />
+                <input type="text" placeholder="Extra concrete layer for pier..." style={{ width: "100%", padding: "8px" }} value={coTitle} onChange={(e) => setCoTitle(e.target.value)} />
               </div>
               <div>
                 <label style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "4px" }}>Description *</label>
-                <textarea required placeholder="Detailed reason for deviation..." rows={4} style={{ width: "100%", padding: "8px", fontFamily: "inherit" }} value={coDesc} onChange={(e) => setCoDesc(e.target.value)} />
+                <textarea placeholder="Detailed reason for deviation..." rows={4} style={{ width: "100%", padding: "8px", fontFamily: "inherit" }} value={coDesc} onChange={(e) => setCoDesc(e.target.value)} />
               </div>
               <div>
                 <label style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "4px" }}>Estimated Cost ($) *</label>
-                <input type="number" required placeholder="4500" style={{ width: "100%", padding: "8px" }} value={coCost} onChange={(e) => setCoCost(e.target.value)} />
+                <input type="number" placeholder="4500" style={{ width: "100%", padding: "8px" }} value={coCost} onChange={(e) => setCoCost(e.target.value)} />
               </div>
+              {coFormError && (
+                <div style={{ padding: "10px 14px", borderRadius: "var(--radius-sm)", backgroundColor: "rgba(239,68,68,0.1)", border: "1px solid var(--error)", color: "var(--error)", fontSize: "13px", fontWeight: 600 }}>
+                  ⚠ {coFormError}
+                </div>
+              )}
               <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "10px" }}>
-                <button type="button" className="btn btn-secondary" onClick={() => setIsCOModalOpen(false)}>Cancel</button>
-                <button type="submit" className="btn btn-primary" style={{ backgroundColor: "var(--accent)", border: "none" }} disabled={isLoading}>{isLoading ? "Submitting..." : "Submit Request"}</button>
+                <button type="button" className="btn btn-secondary" onClick={() => { setIsCOModalOpen(false); setCoFormError(""); }}>Cancel</button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ backgroundColor: "var(--accent)", border: "none" }}
+                  disabled={isLoading}
+                  onClick={handleCreateChangeOrder}
+                >{isLoading ? "Submitting..." : "Submit Request"}</button>
               </div>
-            </form>
+            </div>
           </div>
         </div>
       )}

@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 import { verifyApiAuth } from "@/lib/auth-server";
 import { Role, OrderStatus } from "@prisma/client";
 
-// GET /api/change-orders - List change orders
+// GET /api/change-orders - List change orders (role-scoped)
 export async function GET() {
   try {
     const auth = await verifyApiAuth();
@@ -12,12 +12,22 @@ export async function GET() {
     const { role, userId } = auth.session;
     let changeOrders;
 
-    if (role === Role.OFFICE_ENGINEER || role === Role.CONSTRUCTION_ENGINEER) {
+    const isFieldEngineer =
+      role === Role.CONSTRUCTION_ENGINEER ||
+      role === Role.OFFICE_ENGINEER ||
+      role === Role.SITE_ENGINEER;
+
+    if (isFieldEngineer) {
       changeOrders = await prisma.changeOrder.findMany({
-        where: { project: { engineers: { some: { id: userId } } } },
+        where: {
+          OR: [
+            { project: { engineers: { some: { id: userId } } } },
+            { requesterId: userId },
+          ],
+        },
         include: {
           project: { select: { name: true, code: true, budget: true } },
-          requester: { select: { firstName: true, lastName: true } },
+          requester: { select: { firstName: true, lastName: true, role: true } },
           approver: { select: { firstName: true, lastName: true } },
         },
         orderBy: { createdAt: "desc" },
@@ -29,7 +39,7 @@ export async function GET() {
         },
         include: {
           project: { select: { name: true, code: true, budget: true } },
-          requester: { select: { firstName: true, lastName: true } },
+          requester: { select: { firstName: true, lastName: true, role: true } },
           approver: { select: { firstName: true, lastName: true } },
         },
         orderBy: { createdAt: "desc" },
@@ -38,7 +48,7 @@ export async function GET() {
       changeOrders = await prisma.changeOrder.findMany({
         include: {
           project: { select: { name: true, code: true, budget: true } },
-          requester: { select: { firstName: true, lastName: true } },
+          requester: { select: { firstName: true, lastName: true, role: true } },
           approver: { select: { firstName: true, lastName: true } },
         },
         orderBy: { createdAt: "desc" },
@@ -52,20 +62,30 @@ export async function GET() {
   }
 }
 
-// POST /api/change-orders - Create change order with 25% budget gate
+// POST /api/change-orders - Create Change Order (CE initiates per workflow spec)
 export async function POST(req: NextRequest) {
   try {
-    const allowedRoles: Role[] = [
-      Role.SYSTEM_ADMIN,
-      Role.GENERAL_MANAGER,
-      Role.DEPUTY_GENERAL_MANAGER,
-      Role.VP_OF_CONSTRUCTION,
-      Role.PROJECT_MANAGER,
-    ];
-    const auth = await verifyApiAuth(allowedRoles);
+    const auth = await verifyApiAuth();
     if (!auth.authorized) return auth.response;
 
-    const { userId } = auth.session;
+    const { role, userId } = auth.session;
+
+    // Per spec: Construction Engineer initiates. PM and Head Office may also create.
+    const canCreate =
+      role === Role.CONSTRUCTION_ENGINEER ||
+      role === Role.SYSTEM_ADMIN ||
+      role === Role.GENERAL_MANAGER ||
+      role === Role.DEPUTY_GENERAL_MANAGER ||
+      role === Role.VP_OF_CONSTRUCTION ||
+      role === Role.PROJECT_MANAGER;
+
+    if (!canCreate) {
+      return NextResponse.json(
+        { error: "Only Construction Engineers can initiate Change Orders." },
+        { status: 403 }
+      );
+    }
+
     const body = await req.json();
     const { title, description, estimatedCost, projectId, requestLetterUrl } = body;
 
@@ -76,23 +96,29 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const project = await prisma.project.findUnique({ where: { id: projectId } });
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      include: { engineers: { select: { id: true } } },
+    });
+
     if (!project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
-    const { role } = auth.session;
+    // PM must manage the project
     if (role === Role.PROJECT_MANAGER && project.managerId !== userId) {
       return NextResponse.json(
-        { error: "Access denied. Project Managers can only request change orders for their projects." },
+        { error: "Access denied. You do not manage this project." },
         { status: 403 }
       );
     }
 
+    // Note: CE can create COs on any project — the project workspace already
+    // scopes which projects they can access.
+
     // ── 25% BUDGET HARD GATE ──
     const cost = parseFloat(estimatedCost) || 0;
     if (project.budget > 0) {
-      // Sum all existing approved + pending COs
       const existingCOs = await prisma.changeOrder.aggregate({
         where: {
           projectId,
@@ -107,7 +133,7 @@ export async function POST(req: NextRequest) {
       if (newTotal > threshold) {
         return NextResponse.json(
           {
-            error: `Change Order denied. Total change amount ($${newTotal.toLocaleString()}) exceeds 25% of the baseline project budget ($${threshold.toLocaleString()}). Please seek executive authorization.`,
+            error: `Change Order denied. Total change amount ($${newTotal.toLocaleString()}) exceeds 25% of the baseline project budget ($${threshold.toLocaleString()}). Seek executive authorization.`,
             code: "BUDGET_GATE_EXCEEDED",
             threshold,
             existing: existingTotal,
@@ -124,13 +150,15 @@ export async function POST(req: NextRequest) {
         title,
         description,
         estimatedCost: cost,
-        status: OrderStatus.PENDING_APPROVAL,
+        // Starts as DRAFT in the pipeline — not yet PENDING_APPROVAL
+        status: OrderStatus.DRAFT,
+        workflowStage: "INITIATED",
         projectId,
         requesterId: userId,
         requestLetterUrl: requestLetterUrl || null,
       },
       include: {
-        requester: { select: { firstName: true, lastName: true } },
+        requester: { select: { firstName: true, lastName: true, role: true } },
         approver: { select: { firstName: true, lastName: true } },
       },
     });

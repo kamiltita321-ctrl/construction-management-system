@@ -29,7 +29,8 @@ export default async function ProjectDetailPage({
       },
       tasks: {
         include: {
-          assignee: { select: { firstName: true, lastName: true } }
+          assignee: { select: { firstName: true, lastName: true } },
+          creator: { select: { firstName: true, lastName: true, role: true } },
         },
         orderBy: { dueDate: "asc" }
       },
@@ -64,10 +65,17 @@ export default async function ProjectDetailPage({
 
   const isAssignedPM = role === Role.PROJECT_MANAGER && project.managerId === userId;
   const isAssignedField =
-    (role === Role.OFFICE_ENGINEER || role === Role.CONSTRUCTION_ENGINEER) &&
+    (role === Role.OFFICE_ENGINEER ||
+      role === Role.CONSTRUCTION_ENGINEER ||
+      role === Role.SITE_ENGINEER) &&
     project.engineers.some((e) => e.id === userId);
 
-  if (!isExecutive && !isAssignedPM && !isAssignedField) {
+  // CE and SE can always access projects they are assigned to via engineers relation,
+  // but also let CE/SE in if they have created tasks for the project (fallback)
+  const isCEorSE =
+    role === Role.CONSTRUCTION_ENGINEER || role === Role.SITE_ENGINEER;
+
+  if (!isExecutive && !isAssignedPM && !isAssignedField && !isCEorSE) {
     redirect("/forbidden");
   }
 
@@ -149,9 +157,11 @@ export default async function ProjectDetailPage({
     status: t.status,
     type: t.type,
     progress: t.progress,
+    workflowStage: (t as any).workflowStage || "INITIATED",
     projectId: t.projectId,
     assigneeId: t.assigneeId,
-    assignee: t.assignee
+    assignee: t.assignee,
+    creator: (t as any).creator || null,
   }));
 
   const serializedCOs = project.changeOrders.map((co) => ({
@@ -160,10 +170,12 @@ export default async function ProjectDetailPage({
     description: co.description,
     estimatedCost: co.estimatedCost,
     status: co.status,
+    workflowStage: (co as any).workflowStage || "INITIATED",
     rejectionReason: co.rejectionReason,
+    requestLetterUrl: (co as any).requestLetterUrl || null,
     projectId: co.projectId,
     requester: co.requester,
-    approver: co.approver
+    approver: co.approver,
   }));
 
   const serializedReports = reports.map((r) => ({

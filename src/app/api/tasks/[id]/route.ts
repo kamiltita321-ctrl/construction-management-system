@@ -3,40 +3,28 @@ import { prisma } from "@/lib/db";
 import { verifyApiAuth } from "@/lib/auth-server";
 import { Role, OrderStatus } from "@prisma/client";
 
-// Helper to verify task permissions
-async function getTaskAndCheckPermission(userId: string, role: Role, taskId: string) {
-  const task = await prisma.task.findUnique({
-    where: { id: taskId },
-    include: {
-      project: {
-        include: {
-          engineers: true
-        }
-      }
-    }
-  });
+// ── Pipeline stage definitions ──
+// INITIATED → SE_EXECUTION → CE_QC_REVIEW → PM_APPROVAL → CONSULTANT_REVIEW → COMPLETED
+const STAGE_LABELS: Record<string, string> = {
+  INITIATED:          "Initiated by CE",
+  SE_EXECUTION:       "Site Engineer Execution",
+  CE_QC_REVIEW:       "CE Final Technical Check",
+  PM_APPROVAL:        "Project Manager Approval",
+  CONSULTANT_REVIEW:  "Consultant Review",
+  COMPLETED:          "Completed",
+};
 
-  if (!task) return { exists: false };
-
-  const isExecutive =
-    role === Role.SYSTEM_ADMIN ||
-    role === Role.GENERAL_MANAGER ||
-    role === Role.DEPUTY_GENERAL_MANAGER ||
-    role === Role.VP_OF_CONSTRUCTION;
-
-  const isProjectPM = role === Role.PROJECT_MANAGER && task.project.managerId === userId;
-  const isAssignee = role === Role.OFFICE_ENGINEER && task.project.engineers.some((e: any) => e.id === userId);
-
-  return {
-    exists: true,
-    isExecutive,
-    isProjectPM,
-    isAssignee,
-    task
-  };
+function isExecutive(role: string) {
+  const execRoles: string[] = [
+    Role.SYSTEM_ADMIN,
+    Role.GENERAL_MANAGER,
+    Role.DEPUTY_GENERAL_MANAGER,
+    Role.VP_OF_CONSTRUCTION,
+  ];
+  return execRoles.includes(role);
 }
 
-// PUT /api/tasks/[id] - Update task details, progress or status
+// PUT /api/tasks/[id] - Advance or return Work Order through pipeline
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -47,60 +35,245 @@ export async function PUT(
     if (!auth.authorized) return auth.response;
 
     const { role, userId } = auth.session;
-    const check = await getTaskAndCheckPermission(userId, role as Role, id);
 
-    if (!check.exists) {
-      return NextResponse.json({ error: "Task not found" }, { status: 404 });
-    }
+    const task = await prisma.task.findUnique({
+      where: { id },
+      include: {
+        project: {
+          include: { engineers: { select: { id: true, role: true } } },
+        },
+      },
+    });
 
-    const canEdit = check.isExecutive || check.isProjectPM || check.isAssignee;
-    if (!canEdit) {
-      return NextResponse.json({ error: "Access denied to update task" }, { status: 403 });
+    if (!task) {
+      return NextResponse.json({ error: "Work order not found." }, { status: 404 });
     }
 
     const body = await req.json();
-    const { title, description, dueDate, status, progress, assigneeId } = body;
+    const { action, progress, title, description, dueDate, assigneeId, comment } = body;
 
-    // Build update payload based on role limitations
-    let updateData: any = {};
+    const isCE = role === Role.CONSTRUCTION_ENGINEER;
+    const isSE = role === Role.SITE_ENGINEER;
+    const isPM = role === Role.PROJECT_MANAGER;
+    const isExec = isExecutive(role);
 
-    if (check.isExecutive || check.isProjectPM) {
-      // PMs and leadership can edit everything
-      if (title !== undefined) updateData.title = title;
-      if (description !== undefined) updateData.description = description;
-      if (dueDate !== undefined) updateData.dueDate = new Date(dueDate);
-      if (status !== undefined) updateData.status = status as OrderStatus;
-      if (progress !== undefined) updateData.progress = parseInt(progress) || 0;
-      if (assigneeId !== undefined) updateData.assigneeId = assigneeId || null;
-    } else if (check.isAssignee) {
-      // Office Engineers can only update progress and transition status
-      if (progress !== undefined) updateData.progress = Math.min(Math.max(parseInt(progress) || 0, 0), 100);
-      
-      if (status !== undefined) {
-        const allowedStates = [OrderStatus.IN_PROGRESS, OrderStatus.COMPLETED] as string[];
-        if (allowedStates.includes(status)) {
-          updateData.status = status as OrderStatus;
-        } else {
-          return NextResponse.json({ error: "Office Engineers can only set status to IN_PROGRESS or COMPLETED" }, { status: 400 });
-        }
+    // ── Progress / metadata update (not a stage transition) ──
+    if (action === "update_progress" || (!action && progress !== undefined && !body.action)) {
+      const canUpdateProgress =
+        isExec || isPM || isCE || isSE ||
+        role === Role.OFFICE_ENGINEER;
+
+      if (!canUpdateProgress) {
+        return NextResponse.json({ error: "Access denied." }, { status: 403 });
       }
+
+      const updateData: any = {};
+      if (progress !== undefined) updateData.progress = Math.min(Math.max(parseInt(progress) || 0, 0), 100);
+      if (title !== undefined && (isExec || isPM || isCE)) updateData.title = title;
+      if (description !== undefined && (isExec || isPM || isCE)) updateData.description = description;
+      if (dueDate !== undefined && (isExec || isPM || isCE)) updateData.dueDate = new Date(dueDate);
+      if (assigneeId !== undefined && (isExec || isPM)) updateData.assigneeId = assigneeId || null;
+      if (updateData.progress === 100) updateData.status = OrderStatus.COMPLETED;
+
+      const updated = await prisma.task.update({ where: { id }, data: updateData });
+      return NextResponse.json({ task: updated });
     }
 
-    const updatedTask = await prisma.task.update({
-      where: { id },
-      data: updateData,
-    });
+    // ── Stage transition actions ──
+    const stage = task.workflowStage;
 
-    return NextResponse.json({ task: updatedTask });
+    switch (action) {
+      // CE submits to Site Engineer
+      case "submit_to_se": {
+        if (!isCE && !isExec) {
+          return NextResponse.json({ error: "Only the Construction Engineer can submit to Site Engineer." }, { status: 403 });
+        }
+        if (stage !== "INITIATED") {
+          return NextResponse.json({ error: `Cannot submit: current stage is "${STAGE_LABELS[stage]}".` }, { status: 400 });
+        }
+        const updated = await prisma.task.update({
+          where: { id },
+          data: {
+            workflowStage: "SE_EXECUTION",
+            status: OrderStatus.IN_PROGRESS,
+          },
+        });
+        return NextResponse.json({ task: updated });
+      }
+
+      // SE submits back to CE for final QC
+      case "se_submit_to_ce": {
+        if (!isSE && !isExec) {
+          return NextResponse.json({ error: "Only the Site Engineer can submit back to CE." }, { status: 403 });
+        }
+        if (stage !== "SE_EXECUTION") {
+          return NextResponse.json({ error: `Cannot submit: current stage is "${STAGE_LABELS[stage]}".` }, { status: 400 });
+        }
+        const updated = await prisma.task.update({
+          where: { id },
+          data: { workflowStage: "CE_QC_REVIEW" },
+        });
+        return NextResponse.json({ task: updated });
+      }
+
+      // SE returns to CE for correction
+      case "se_return_to_ce": {
+        if (!isSE && !isExec) {
+          return NextResponse.json({ error: "Only the Site Engineer can return to CE." }, { status: 403 });
+        }
+        if (stage !== "SE_EXECUTION") {
+          return NextResponse.json({ error: `Cannot return: current stage is "${STAGE_LABELS[stage]}".` }, { status: 400 });
+        }
+        const updated = await prisma.task.update({
+          where: { id },
+          data: { workflowStage: "INITIATED" },
+        });
+        return NextResponse.json({ task: updated });
+      }
+
+      // CE approves final QC and sends to PM
+      case "ce_approve_to_pm": {
+        if (!isCE && !isExec) {
+          return NextResponse.json({ error: "Only the Construction Engineer can submit to Project Manager." }, { status: 403 });
+        }
+        if (stage !== "CE_QC_REVIEW") {
+          return NextResponse.json({ error: `Cannot submit: current stage is "${STAGE_LABELS[stage]}".` }, { status: 400 });
+        }
+        const updated = await prisma.task.update({
+          where: { id },
+          data: {
+            workflowStage: "PM_APPROVAL",
+            status: OrderStatus.PENDING_APPROVAL,
+          },
+        });
+        return NextResponse.json({ task: updated });
+      }
+
+      // CE returns from QC stage back to SE
+      case "ce_return_to_se": {
+        if (!isCE && !isExec) {
+          return NextResponse.json({ error: "Only the Construction Engineer can return to Site Engineer." }, { status: 403 });
+        }
+        if (stage !== "CE_QC_REVIEW") {
+          return NextResponse.json({ error: `Cannot return: current stage is "${STAGE_LABELS[stage]}".` }, { status: 400 });
+        }
+        const updated = await prisma.task.update({
+          where: { id },
+          data: { workflowStage: "SE_EXECUTION" },
+        });
+        return NextResponse.json({ task: updated });
+      }
+
+      // PM approves and forwards to Consultant
+      case "pm_approve": {
+        if (!isPM && !isExec) {
+          return NextResponse.json({ error: "Only the Project Manager can approve." }, { status: 403 });
+        }
+        if (stage !== "PM_APPROVAL") {
+          return NextResponse.json({ error: `Cannot approve: current stage is "${STAGE_LABELS[stage]}".` }, { status: 400 });
+        }
+        // PM must manage this project
+        if (isPM && task.project.managerId !== userId) {
+          return NextResponse.json({ error: "You do not manage this project." }, { status: 403 });
+        }
+        const updated = await prisma.task.update({
+          where: { id },
+          data: {
+            workflowStage: "CONSULTANT_REVIEW",
+            status: OrderStatus.APPROVED,
+          },
+        });
+        return NextResponse.json({ task: updated });
+      }
+
+      // PM rejects and returns to CE
+      case "pm_reject": {
+        if (!isPM && !isExec) {
+          return NextResponse.json({ error: "Only the Project Manager can reject." }, { status: 403 });
+        }
+        if (stage !== "PM_APPROVAL") {
+          return NextResponse.json({ error: `Cannot reject: current stage is "${STAGE_LABELS[stage]}".` }, { status: 400 });
+        }
+        if (isPM && task.project.managerId !== userId) {
+          return NextResponse.json({ error: "You do not manage this project." }, { status: 403 });
+        }
+        const updated = await prisma.task.update({
+          where: { id },
+          data: {
+            workflowStage: "INITIATED",
+            status: OrderStatus.REJECTED,
+          },
+        });
+        return NextResponse.json({ task: updated });
+      }
+
+      // PM returns to CE for correction without rejection
+      case "pm_return": {
+        if (!isPM && !isExec) {
+          return NextResponse.json({ error: "Only the Project Manager can return for correction." }, { status: 403 });
+        }
+        if (stage !== "PM_APPROVAL") {
+          return NextResponse.json({ error: `Cannot return: current stage is "${STAGE_LABELS[stage]}".` }, { status: 400 });
+        }
+        if (isPM && task.project.managerId !== userId) {
+          return NextResponse.json({ error: "You do not manage this project." }, { status: 403 });
+        }
+        const updated = await prisma.task.update({
+          where: { id },
+          data: { workflowStage: "CE_QC_REVIEW" },
+        });
+        return NextResponse.json({ task: updated });
+      }
+
+      // Consultant accepts
+      case "consultant_accept": {
+        if (!isExec && !isPM) {
+          return NextResponse.json({ error: "Only executive roles can act as Consultant." }, { status: 403 });
+        }
+        if (stage !== "CONSULTANT_REVIEW") {
+          return NextResponse.json({ error: `Cannot accept: current stage is "${STAGE_LABELS[stage]}".` }, { status: 400 });
+        }
+        const updated = await prisma.task.update({
+          where: { id },
+          data: {
+            workflowStage: "COMPLETED",
+            status: OrderStatus.COMPLETED,
+            progress: 100,
+          },
+        });
+        return NextResponse.json({ task: updated });
+      }
+
+      // Consultant rejects
+      case "consultant_reject": {
+        if (!isExec && !isPM) {
+          return NextResponse.json({ error: "Only executive roles can act as Consultant." }, { status: 403 });
+        }
+        if (stage !== "CONSULTANT_REVIEW") {
+          return NextResponse.json({ error: `Cannot reject: current stage is "${STAGE_LABELS[stage]}".` }, { status: 400 });
+        }
+        const updated = await prisma.task.update({
+          where: { id },
+          data: {
+            workflowStage: "PM_APPROVAL",
+            status: OrderStatus.PENDING_APPROVAL,
+          },
+        });
+        return NextResponse.json({ task: updated });
+      }
+
+      default:
+        return NextResponse.json({ error: "Unknown action." }, { status: 400 });
+    }
   } catch (error: any) {
     console.error("PUT /api/tasks/[id] error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
-// DELETE /api/tasks/[id] - Delete task
+// DELETE /api/tasks/[id] - Delete work order (PM or Executive only)
 export async function DELETE(
-  req: NextRequest,
+  _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -109,22 +282,30 @@ export async function DELETE(
     if (!auth.authorized) return auth.response;
 
     const { role, userId } = auth.session;
-    const check = await getTaskAndCheckPermission(userId, role as Role, id);
 
-    if (!check.exists) {
-      return NextResponse.json({ error: "Task not found" }, { status: 404 });
-    }
+    const canDelete =
+      isExecutive(role) || role === Role.PROJECT_MANAGER;
 
-    const canDelete = check.isExecutive || check.isProjectPM;
     if (!canDelete) {
-      return NextResponse.json({ error: "Access denied. Only project managers or leadership can delete tasks" }, { status: 403 });
+      return NextResponse.json({ error: "Only project managers or leadership can delete work orders." }, { status: 403 });
     }
 
-    await prisma.task.delete({
-      where: { id }
+    const task = await prisma.task.findUnique({
+      where: { id },
+      include: { project: { select: { managerId: true } } },
     });
 
-    return NextResponse.json({ success: true, message: "Task deleted successfully" });
+    if (!task) {
+      return NextResponse.json({ error: "Work order not found." }, { status: 404 });
+    }
+
+    if (role === Role.PROJECT_MANAGER && task.project.managerId !== userId) {
+      return NextResponse.json({ error: "You do not manage this project." }, { status: 403 });
+    }
+
+    await prisma.task.delete({ where: { id } });
+
+    return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error("DELETE /api/tasks/[id] error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
