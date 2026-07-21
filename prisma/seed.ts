@@ -45,6 +45,8 @@ async function main() {
   const pmPass = await hashPassword("pm123");
   const sePass = await hashPassword("se123");
   const cePass = await hashPassword("ce123");
+  const ceHeadPass = await hashPassword("cehead123");
+  const siteEngPass = await hashPassword("siteeng123");
 
   const systemAdmin = await prisma.user.create({
     data: {
@@ -123,6 +125,28 @@ async function main() {
     },
   });
 
+  const constructionEngineerHead = await prisma.user.create({
+    data: {
+      email: "cehead@cms.com",
+      passwordHash: ceHeadPass,
+      firstName: "Cynthia",
+      lastName: "Head",
+      role: "CONSTRUCTION_ENGINEER_HEAD",
+      phone: "+15550800",
+    },
+  });
+
+  const siteEngineerUser = await prisma.user.create({
+    data: {
+      email: "siteeng@cms.com",
+      passwordHash: siteEngPass,
+      firstName: "Samuel",
+      lastName: "Site",
+      role: "SITE_ENGINEER",
+      phone: "+15550900",
+    },
+  });
+
   console.log("Users created successfully:");
   console.log(`- System Admin: ${systemAdmin.email}`);
   console.log(`- General Manager: ${generalManager.email}`);
@@ -131,6 +155,8 @@ async function main() {
   console.log(`- Project Manager: ${projectManager.email}`);
   console.log(`- Office Engineer: ${siteEngineer.email}`);
   console.log(`- Construction Engineer: ${constructionEngineer.email}`);
+  console.log(`- Construction Engineer Head: ${constructionEngineerHead.email}`);
+  console.log(`- Site Engineer: ${siteEngineerUser.email}`);
 
   // 3. Create active project
   console.log("Creating seed project...");
@@ -147,7 +173,9 @@ async function main() {
       engineers: {
         connect: [
           { id: siteEngineer.id },
-          { id: constructionEngineer.id }
+          { id: constructionEngineer.id },
+          { id: constructionEngineerHead.id },
+          { id: siteEngineerUser.id }
         ],
       },
     },
