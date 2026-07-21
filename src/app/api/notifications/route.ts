@@ -100,9 +100,56 @@ export async function GET(req: NextRequest) {
       });
     });
 
+    // 4. Fetch persisted notifications from DB
+    const dbNotifications = await prisma.notification.findMany({
+      where: { userId, isRead: false },
+      orderBy: { createdAt: "desc" }
+    });
+
+    dbNotifications.forEach((n: any) => {
+      alerts.push({
+        id: n.id,
+        type: "WORKFLOW_NOTIFICATION",
+        title: n.title,
+        message: n.message,
+        date: n.createdAt.toISOString()
+      });
+    });
+
     return NextResponse.json({ alerts });
   } catch (error: any) {
     console.error("GET /api/notifications error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
+
+// PATCH /api/notifications - Mark a persisted notification as read (or all)
+export async function PATCH(req: NextRequest) {
+  try {
+    const auth = await verifyApiAuth();
+    if (!auth.authorized) return auth.response;
+
+    const { userId } = auth.session;
+    const body = await req.json().catch(() => ({}));
+    const { id } = body;
+
+    if (id) {
+      // Mark specific notification as read
+      await prisma.notification.updateMany({
+        where: { id, userId },
+        data: { isRead: true }
+      });
+    } else {
+      // Mark all as read
+      await prisma.notification.updateMany({
+        where: { userId, isRead: false },
+        data: { isRead: true }
+      });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    console.error("PATCH /api/notifications error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

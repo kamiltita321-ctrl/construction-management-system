@@ -15,7 +15,7 @@ export default async function ProjectDetailPage({
   const { id } = await params;
 
   // 1. Fetch project details
-  const project = await prisma.project.findUnique({
+  const project: any = await prisma.project.findUnique({
     where: { id },
     include: {
       manager: {
@@ -31,6 +31,8 @@ export default async function ProjectDetailPage({
         include: {
           assignee: { select: { firstName: true, lastName: true } },
           creator: { select: { firstName: true, lastName: true, role: true } },
+          history: { orderBy: { createdAt: "desc" } },
+          comments: { orderBy: { createdAt: "asc" } },
         },
         orderBy: { dueDate: "asc" }
       },
@@ -68,7 +70,7 @@ export default async function ProjectDetailPage({
     (role === Role.OFFICE_ENGINEER ||
       role === Role.CONSTRUCTION_ENGINEER ||
       role === Role.SITE_ENGINEER) &&
-    project.engineers.some((e) => e.id === userId);
+    project.engineers.some((e: any) => e.id === userId);
 
   // CE and SE can always access projects they are assigned to via engineers relation,
   // but also let CE/SE in if they have created tasks for the project (fallback)
@@ -130,7 +132,7 @@ export default async function ProjectDetailPage({
     lagReason: (project as any).lagReason || null,
     manager: project.manager,
     engineers: project.engineers,
-    milestones: project.milestones.map((m) => ({
+    milestones: project.milestones.map((m: any) => ({
       id: m.id,
       title: m.title,
       description: m.description,
@@ -138,7 +140,7 @@ export default async function ProjectDetailPage({
       isCompleted: m.isCompleted,
     })),
     materials: project.materials,
-    documents: project.documents.map((d) => ({
+    documents: project.documents.map((d: any) => ({
       id: d.id,
       title: d.title,
       fileUrl: d.fileUrl,
@@ -149,7 +151,7 @@ export default async function ProjectDetailPage({
     })),
   };
 
-  const serializedTasks = project.tasks.map((t) => ({
+  const serializedTasks = project.tasks.map((t: any) => ({
     id: t.id,
     title: t.title,
     description: t.description,
@@ -162,9 +164,27 @@ export default async function ProjectDetailPage({
     assigneeId: t.assigneeId,
     assignee: t.assignee,
     creator: (t as any).creator || null,
+    history: t.history.map((h: any) => ({
+      id: h.id,
+      fromStage: h.fromStage,
+      toStage: h.toStage,
+      action: h.action,
+      actorName: h.actorName,
+      actorRole: h.actorRole,
+      note: h.note,
+      createdAt: h.createdAt.toISOString()
+    })),
+    comments: t.comments.map((c: any) => ({
+      id: c.id,
+      authorName: c.authorName,
+      authorRole: c.authorRole,
+      content: c.content,
+      createdAt: c.createdAt.toISOString()
+    })),
+    lastReturnReason: t.lastReturnReason,
   }));
 
-  const serializedCOs = project.changeOrders.map((co) => ({
+  const serializedCOs = project.changeOrders.map((co: any) => ({
     id: co.id,
     title: co.title,
     description: co.description,
@@ -178,7 +198,7 @@ export default async function ProjectDetailPage({
     approver: co.approver,
   }));
 
-  const serializedReports = reports.map((r) => ({
+  const serializedReports = reports.map((r: any) => ({
     id: r.id,
     reportDate: r.reportDate.toISOString().split("T")[0],
     workCompleted: r.workCompleted,
@@ -192,19 +212,19 @@ export default async function ProjectDetailPage({
     lastEditedBy: r.lastEditedBy,
     lastEditedRole: r.lastEditedRole,
     lastEditedAt: r.lastEditedAt ? r.lastEditedAt.toISOString() : null,
-    materialUsage: r.materialUsage.map((u) => ({
+    materialUsage: r.materialUsage.map((u: any) => ({
       id: u.id,
       materialName: u.materialName,
       quantityUsed: u.quantityUsed
     })),
-    photos: r.photos.map((p) => ({
+    photos: r.photos.map((p: any) => ({
       id: p.id,
       fileUrl: p.fileUrl,
       caption: p.caption
     }))
   }));
 
-  const serializedSummaries = summaries.map((s) => ({
+  const serializedSummaries = summaries.map((s: any) => ({
     id: s.id,
     title: s.title,
     reportType: s.reportType,
