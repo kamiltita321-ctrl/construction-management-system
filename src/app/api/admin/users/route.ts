@@ -86,6 +86,8 @@ export async function GET() {
         phone: true,
         isActive: true,
         createdAt: true,
+        managedProjects: { select: { id: true, name: true, code: true } },
+        siteProjects: { select: { id: true, name: true, code: true } },
       },
     });
 
