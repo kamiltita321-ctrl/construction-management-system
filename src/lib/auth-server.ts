@@ -67,7 +67,6 @@ export const FIELD_ROLES: Role[] = [
   Role.PROJECT_MANAGER,
   Role.CONSTRUCTION_ENGINEER,
   Role.OFFICE_ENGINEER,
-  Role.CONSTRUCTION_ENGINEER_HEAD,
   Role.SITE_ENGINEER,
 ];
 
@@ -76,7 +75,6 @@ export const WORK_ORDER_ROLES: Role[] = [
   ...EXECUTIVE_ROLES,
   Role.PROJECT_MANAGER,
   Role.CONSTRUCTION_ENGINEER,
-  Role.CONSTRUCTION_ENGINEER_HEAD,
 ];
 
 /** Roles that can approve Change Orders */
@@ -93,7 +91,6 @@ export const INSPECTION_CREATE_ROLES: Role[] = [
   ...EXECUTIVE_ROLES,
   Role.PROJECT_MANAGER,
   Role.CONSTRUCTION_ENGINEER,
-  Role.CONSTRUCTION_ENGINEER_HEAD,
 ];
 
 /** Roles that can encode final Inspection results */

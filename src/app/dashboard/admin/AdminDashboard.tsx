@@ -207,7 +207,6 @@ export default function AdminDashboard({ currentUserRole }: { currentUserRole: s
                     <option value="PROJECT_MANAGER">Project Manager</option>
                     <option value="CONSTRUCTION_ENGINEER">Construction Engineer</option>
                     <option value="OFFICE_ENGINEER">Office Engineer</option>
-                    <option value="CONSTRUCTION_ENGINEER_HEAD">Construction Engineer Head</option>
                     <option value="SITE_ENGINEER">Site Engineer</option>
                     <option value="SYSTEM_ADMIN">System Admin</option>
                   </select>
